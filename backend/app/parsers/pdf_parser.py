@@ -31,13 +31,39 @@ _SUMMARY_LINE_RE = re.compile(
 )
 
 
-def _get_invert_sign(institution: Optional[str]) -> bool:
-    """Return True when the institution's PDF uses positive = charge (e.g. Amex)."""
-    if not institution:
-        return False
-    for profile in _PROFILES:
-        if profile.name == institution:
-            return profile.invert_sign
+_PAYMENT_ACK_RE = re.compile(
+    r"payment\s+(thank\s+you|received|processed|applied|credit)",
+    re.IGNORECASE,
+)
+
+
+def _needs_pdf_sign_inversion(institution: Optional[str], full_text: str) -> bool:
+    """Return True when the PDF uses positive=charge convention.
+
+    Two signals trigger inversion:
+    1. The institution profile already declares invert_sign (e.g. Amex CSV).
+    2. Content-based: a payment-acknowledgment line carries a negative amount,
+       which means charges are positive in this PDF (Chase credit card, etc.).
+    """
+    if institution:
+        for profile in _PROFILES:
+            if profile.name == institution and profile.invert_sign:
+                return True
+
+    for line in full_text.splitlines():
+        line = line.strip()
+        if not _PAYMENT_ACK_RE.search(line):
+            continue
+        amounts = _AMOUNT_RE.findall(line)
+        if not amounts:
+            continue
+        raw = amounts[-1].replace("$", "").replace(",", "")
+        try:
+            if float(raw) < 0:
+                return True
+        except ValueError:
+            pass
+
     return False
 
 
@@ -49,7 +75,7 @@ def parse_pdf(content: bytes) -> dict:
     with pdfplumber.open(io.BytesIO(content)) as pdf:
         full_text = "\n".join(page.extract_text() or "" for page in pdf.pages)
         institution = _detect_institution(full_text)
-        invert_sign = _get_invert_sign(institution)
+        invert_sign = _needs_pdf_sign_inversion(institution, full_text)
 
         for page in pdf.pages:
             for table in page.extract_tables() or []:
