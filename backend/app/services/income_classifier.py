@@ -10,16 +10,23 @@ _NOT_INCOME = [
     r"online transfer",
     r"internal transfer",
     r"account transfer",
+    r"\bext\s+trnsfr\b",            # JPMorgan "Ext Trnsfr" = external own-account transfer
     # Credit card payments — these appear as credits on card statements but are not income
     r"\bautopay\b",
     r"payment (thank you|received|processed|applied)",
-    r"payment - thank you",
+    r"payment\s*-\s*thank you",
     r"(automatic|online|electronic|minimum) payment",
     r"thank you for.{0,20}payment",
     r"\bbill pay(ment)?\b",
     # ACH debits / outgoing payments (some PDF parsers show positive amounts for debits)
     r"\bach (debit|pmt)\b",
     r"\bloan pay(mt|ment)\b",
+    # Explicit outflows that should never appear as income even if sign is wrong
+    r"\batm withdrawal\b",
+    r"\bpos transaction\b",
+    # Statement metadata mistakenly parsed as transactions
+    r"\bstarting balance\b",
+    r"\bopening balance\b",
     # Reversals / adjustments
     r"\brefund\b",
     r"\breturn\b",
@@ -31,6 +38,28 @@ _NOT_INCOME = [
     # Deposits that aren't income
     r"atm deposit",
     r"mobile deposit",
+]
+
+# Patterns for credit transactions that should be hidden from the income review UI
+# entirely — not just excluded from income candidates, but invisible to the user.
+# These are either accounting artifacts (CC payment confirmations) or outflows
+# that were misclassified as credits due to sign-convention bugs.
+_EXCLUDE_FROM_REVIEW = [
+    # CC payment acknowledgment lines
+    r"payment\s+(thank\s+you|received|processed|applied)",
+    r"payment\s*-\s*thank\s+you",
+    r"thank\s+you.{0,25}payment",
+    r"\bautopay\b",
+    r"(automatic|online|electronic|minimum)\s+payment",
+    r"\bbill\s+pay(ment)?\b",
+    # Explicit outflows (appear as credits only when sign convention is misread)
+    r"\bach\s+debit\b",
+    r"\batm\s+withdrawal\b",
+    r"\bpos\s+transaction\b",
+    r"\bloan\s+pay(mt|ment)\b",
+    # Statement metadata
+    r"\bstarting\s+balance\b",
+    r"\bopening\s+balance\b",
 ]
 
 _SALARY = [
@@ -48,7 +77,8 @@ _SALARY = [
 ]
 
 _INTEREST = [
-    r"interest (paid|earned|credit)",
+    r"interest (paid|earned|credit|payment)",
+    r"\binterest\s+payment\b",
     r"\bdividend\b",
     r"\bapy\b",
     r"savings interest",
@@ -91,6 +121,15 @@ _LARGE_CREDIT_THRESHOLD = 500.0
 
 def _matches_any(desc: str, patterns: list[str]) -> bool:
     return any(re.search(p, desc, re.IGNORECASE) for p in patterns)
+
+
+def exclude_from_review(description: str) -> bool:
+    """True when a credit transaction should be hidden from the income review UI.
+
+    Used to suppress CC payment confirmations and outflows that appear as credits
+    due to sign-convention misreads — neither are useful to show for income review.
+    """
+    return _matches_any(description, _EXCLUDE_FROM_REVIEW)
 
 
 def classify_income(

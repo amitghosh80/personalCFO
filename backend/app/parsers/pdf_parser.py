@@ -6,6 +6,10 @@ from ..models.transaction import TransactionType
 from .institution_profiles import PROFILES as _PROFILES
 
 _INSTITUTION_KEYWORDS: dict[str, list[str]] = {
+    # First Tech must come before Chase/Amex: First Tech checking statements
+    # contain "JPMorgan Chase" and "AMEX EPAYMENT" in transaction descriptions,
+    # which would falsely trigger those institutions if checked first.
+    "First Tech": ["first technology federal", "first tech federal", "firsttech.com"],
     "Chase": ["jpmorgan chase", "chase bank", "chase.com"],
     "Bank of America": ["bank of america", "bankofamerica"],
     "Wells Fargo": ["wells fargo"],
@@ -26,7 +30,7 @@ _SUMMARY_LINE_RE = re.compile(
     r"new charges|previous balance|minimum (payment|due)|payment due|late fee|"
     r"credit limit|available credit|closing date|total (credit|debit|amount|charges|payments)|"
     r"account (balance|summary)|statement (balance|total)|interest charged|"
-    r"opening balance|past due|amount due|balance due|days in billing",
+    r"opening balance|starting balance|past due|amount due|balance due|days in billing",
     re.IGNORECASE,
 )
 
@@ -74,7 +78,11 @@ def parse_pdf(content: bytes) -> dict:
 
     with pdfplumber.open(io.BytesIO(content)) as pdf:
         full_text = "\n".join(page.extract_text() or "" for page in pdf.pages)
-        institution = _detect_institution(full_text)
+        # Detect institution from first-page text only to avoid false matches
+        # from institution names that appear in transaction descriptions
+        # (e.g. "AMEX EPAYMENT" or "JPMorgan Chase" in First Tech transactions).
+        first_page_text = (pdf.pages[0].extract_text() or "") if pdf.pages else ""
+        institution = _detect_institution(first_page_text)
         invert_sign = _needs_pdf_sign_inversion(institution, full_text)
 
         for page in pdf.pages:

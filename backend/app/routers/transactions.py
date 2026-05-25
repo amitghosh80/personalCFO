@@ -7,6 +7,7 @@ from ..database import get_session
 from ..models.import_job import ImportJob, ImportStatus
 from ..models.transaction import IncomeCategory, Transaction, TransactionType
 from ..services.encryption import decrypt
+from ..services.income_classifier import exclude_from_review
 
 router = APIRouter(prefix="/api", tags=["transactions"])
 
@@ -52,14 +53,22 @@ def list_transactions(
 def get_income_candidates(job_id: str, session: Session = Depends(get_session)):
     _require_job(session, job_id)
 
-    # Return ALL credits grouped: income candidates first, then the rest
     query = (
         select(Transaction)
         .where(Transaction.import_job_id == job_id)
         .where(Transaction.transaction_type == TransactionType.credit)
         .order_by(Transaction.is_income_candidate.desc(), Transaction.amount.desc())
     )
-    return [_serialize(t) for t in session.exec(query).all()]
+
+    results = []
+    for t in session.exec(query).all():
+        row = _serialize(t)
+        # Hide non-candidate credits that are definitively not income and add no
+        # review value (CC payment confirmations, sign-inverted outflows, metadata).
+        if not t.is_income_candidate and exclude_from_review(row["description"]):
+            continue
+        results.append(row)
+    return results
 
 
 @router.patch("/import/{job_id}/income-review")
