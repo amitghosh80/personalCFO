@@ -3,6 +3,7 @@ import re
 from typing import Optional
 import pdfplumber
 from ..models.transaction import TransactionType
+from .institution_profiles import PROFILES as _PROFILES
 
 _INSTITUTION_KEYWORDS: dict[str, list[str]] = {
     "Chase": ["jpmorgan chase", "chase bank", "chase.com"],
@@ -18,6 +19,27 @@ _DATE_RE = re.compile(
 )
 _AMOUNT_RE = re.compile(r"([\-\+]?\$?[\d,]+\.\d{2})")
 
+# Lines that are statement metadata/summaries, not individual transactions.
+# These often contain a date and dollar amount and would otherwise be parsed
+# as transactions by the text-line fallback.
+_SUMMARY_LINE_RE = re.compile(
+    r"new charges|previous balance|minimum (payment|due)|payment due|late fee|"
+    r"credit limit|available credit|closing date|total (credit|debit|amount|charges|payments)|"
+    r"account (balance|summary)|statement (balance|total)|interest charged|"
+    r"opening balance|past due|amount due|balance due|days in billing",
+    re.IGNORECASE,
+)
+
+
+def _get_invert_sign(institution: Optional[str]) -> bool:
+    """Return True when the institution's PDF uses positive = charge (e.g. Amex)."""
+    if not institution:
+        return False
+    for profile in _PROFILES:
+        if profile.name == institution:
+            return profile.invert_sign
+    return False
+
 
 def parse_pdf(content: bytes) -> dict:
     transactions: list[dict] = []
@@ -27,16 +49,17 @@ def parse_pdf(content: bytes) -> dict:
     with pdfplumber.open(io.BytesIO(content)) as pdf:
         full_text = "\n".join(page.extract_text() or "" for page in pdf.pages)
         institution = _detect_institution(full_text)
+        invert_sign = _get_invert_sign(institution)
 
         for page in pdf.pages:
             for table in page.extract_tables() or []:
-                result = _parse_table(table)
+                result = _parse_table(table, invert_sign=invert_sign)
                 transactions.extend(result["transactions"])
                 ambiguous.extend(result["ambiguous"])
 
         # Fallback to line-by-line if tables yielded nothing
         if not transactions:
-            result = _parse_text_lines(full_text)
+            result = _parse_text_lines(full_text, invert_sign=invert_sign)
             transactions.extend(result["transactions"])
             ambiguous.extend(result["ambiguous"])
 
@@ -56,7 +79,7 @@ def _detect_institution(text: str) -> Optional[str]:
     return None
 
 
-def _parse_table(table: list) -> dict:
+def _parse_table(table: list, invert_sign: bool = False) -> dict:
     transactions: list[dict] = []
     ambiguous: list[dict] = []
 
@@ -90,7 +113,7 @@ def _parse_table(table: list) -> dict:
                 ambiguous.append({"reason": "ambiguous_date", "detail": f"Cannot parse date '{date_str}'"})
                 continue
 
-            amount, txn_type = _extract_table_amount(row, amount_idx, debit_idx, credit_idx)
+            amount, txn_type = _extract_table_amount(row, amount_idx, debit_idx, credit_idx, invert_sign)
             if amount is None:
                 continue
 
@@ -107,7 +130,7 @@ def _parse_table(table: list) -> dict:
     return {"transactions": transactions, "ambiguous": ambiguous}
 
 
-def _extract_table_amount(row, amount_idx, debit_idx, credit_idx):
+def _extract_table_amount(row, amount_idx, debit_idx, credit_idx, invert_sign: bool = False):
     def clean(val) -> Optional[float]:
         if val is None:
             return None
@@ -122,11 +145,15 @@ def _extract_table_amount(row, amount_idx, debit_idx, credit_idx):
     if amount_idx is not None:
         v = clean(row[amount_idx])
         if v is not None:
-            return abs(v), TransactionType.credit if v >= 0 else TransactionType.debit
+            if invert_sign:
+                v = -v
+            return abs(v), TransactionType.debit if v < 0 else TransactionType.credit
 
     if debit_idx is not None or credit_idx is not None:
         debit = clean(row[debit_idx]) if debit_idx is not None else None
         credit = clean(row[credit_idx]) if credit_idx is not None else None
+        # Separate debit/credit columns already encode direction — invert_sign
+        # does not apply (column names define the sign convention explicitly).
         if credit and credit > 0:
             return credit, TransactionType.credit
         if debit and debit > 0:
@@ -135,13 +162,18 @@ def _extract_table_amount(row, amount_idx, debit_idx, credit_idx):
     return None, None
 
 
-def _parse_text_lines(text: str) -> dict:
+def _parse_text_lines(text: str, invert_sign: bool = False) -> dict:
     transactions: list[dict] = []
     ambiguous: list[dict] = []
 
     for line in text.splitlines():
         line = line.strip()
         if not line:
+            continue
+
+        # Skip statement summary/metadata lines — they contain dates and dollar
+        # amounts but are not individual transactions.
+        if _SUMMARY_LINE_RE.search(line) or "%" in line:
             continue
 
         date_match = _DATE_RE.search(line)
@@ -162,6 +194,9 @@ def _parse_text_lines(text: str) -> dict:
             raw_amount = txn_amount_str.replace("$", "").replace(",", "")
             value = float(raw_amount)
 
+            if invert_sign:
+                value = -value
+
             desc_start = date_match.end()
             txn_amount_pos = line.rfind(txn_amount_str)
             description = line[desc_start:txn_amount_pos].strip() if txn_amount_pos > desc_start else line.strip()
@@ -172,7 +207,7 @@ def _parse_text_lines(text: str) -> dict:
                 "date": parsed_date,
                 "description": description,
                 "amount": abs(value),
-                "transaction_type": TransactionType.credit if value >= 0 else TransactionType.debit,
+                "transaction_type": TransactionType.debit if value < 0 else TransactionType.credit,
                 "currency": "USD",
             })
         except Exception as e:

@@ -17,6 +17,9 @@ _NOT_INCOME = [
     r"(automatic|online|electronic|minimum) payment",
     r"thank you for.{0,20}payment",
     r"\bbill pay(ment)?\b",
+    # ACH debits / outgoing payments (some PDF parsers show positive amounts for debits)
+    r"\bach (debit|pmt)\b",
+    r"\bloan pay(mt|ment)\b",
     # Reversals / adjustments
     r"\brefund\b",
     r"\breturn\b",
