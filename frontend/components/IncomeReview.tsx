@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { confirmIncome, getIncomeReview } from "@/lib/api";
+import { exportToExcel } from "@/lib/export";
 import type { IncomeCategory, Transaction } from "@/lib/types";
 
 const CATEGORY_LABELS: Record<IncomeCategory | "other", string> = {
@@ -104,6 +105,22 @@ export default function IncomeReview({ jobId }: { jobId: string }) {
 
   const handleSkip = () => router.push(`/import/${jobId}/summary`);
 
+  const handleExport = () => {
+    const categoryOverrides = Object.fromEntries(
+      Object.entries(rowState).map(([id, s]) => [id, s.category])
+    );
+    const incomeTxns = credits.filter((t) => t.is_income_candidate);
+    const otherTxns = credits.filter((t) => !t.is_income_candidate);
+    const sections = [];
+    if (incomeTxns.length > 0) {
+      sections.push({ name: "Likely Income", transactions: incomeTxns, categoryOverrides });
+    }
+    if (otherTxns.length > 0) {
+      sections.push({ name: "Other Credits", transactions: otherTxns, categoryOverrides });
+    }
+    exportToExcel(sections, `income-review-${jobId.slice(0, 8)}.xlsx`);
+  };
+
   if (loading) return <div className="text-gray-500">Loading income candidates…</div>;
 
   const candidates = credits.filter((t) => t.is_income_candidate);
@@ -155,7 +172,7 @@ export default function IncomeReview({ jobId }: { jobId: string }) {
         </div>
       )}
 
-      <div className="mt-8 flex gap-3">
+      <div className="mt-8 flex gap-3 flex-wrap">
         <button
           onClick={handleConfirm}
           disabled={saving}
@@ -163,9 +180,20 @@ export default function IncomeReview({ jobId }: { jobId: string }) {
         >
           {saving ? "Saving…" : "Confirm & Continue"}
         </button>
+        {credits.length > 0 && (
+          <button
+            onClick={handleExport}
+            className="px-5 py-3 text-gray-700 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors flex items-center gap-2 shrink-0"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
+            Export Excel
+          </button>
+        )}
         <button
           onClick={handleSkip}
-          className="px-6 py-3 text-gray-600 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors"
+          className="px-6 py-3 text-gray-600 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors shrink-0"
         >
           Skip for now
         </button>
