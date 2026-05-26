@@ -98,27 +98,45 @@ def confirm_income(
 
 @router.get("/import/{job_id}/summary")
 def get_import_summary(job_id: str, session: Session = Depends(get_session)):
-    job = _require_job(session, job_id)
+    from collections import defaultdict
 
+    job = _require_job(session, job_id)
     txns = session.exec(
         select(Transaction).where(Transaction.import_job_id == job_id)
     ).all()
 
-    credits = [t for t in txns if t.transaction_type == TransactionType.credit]
-    debits = [t for t in txns if t.transaction_type == TransactionType.debit]
-    confirmed_income = [t for t in txns if t.income_confirmed is True]
-    unreviewed_income = [t for t in txns if t.is_income_candidate and t.income_confirmed is None]
+    # Build month-keyed buckets (YYYY-MM)
+    buckets: dict[str, dict] = defaultdict(lambda: {"income": 0.0, "expenses": 0.0})
+    has_unreviewed = False
+
+    for t in txns:
+        key = t.date.strftime("%Y-%m")
+        if t.transaction_type == TransactionType.debit:
+            buckets[key]["expenses"] += t.amount
+        elif t.transaction_type == TransactionType.credit:
+            # Confirmed income, or auto-detected candidate not yet reviewed
+            if t.income_confirmed is True:
+                buckets[key]["income"] += t.amount
+            elif t.is_income_candidate and t.income_confirmed is None:
+                buckets[key]["income"] += t.amount
+                has_unreviewed = True
+
+    monthly_breakdown = [
+        {
+            "month": month,
+            "income": round(data["income"], 2),
+            "expenses": round(data["expenses"], 2),
+            "net": round(data["income"] - data["expenses"], 2),
+        }
+        for month, data in sorted(buckets.items())
+    ]
 
     return {
         "import_job_id": job_id,
         "status": job.status,
         "total_transactions": len(txns),
-        "total_credits": round(sum(t.amount for t in credits), 2),
-        "total_debits": round(sum(t.amount for t in debits), 2),
-        "net_cash_flow": round(sum(t.amount for t in credits) - sum(t.amount for t in debits), 2),
-        "confirmed_income": round(sum(t.amount for t in confirmed_income), 2),
-        "confirmed_income_count": len(confirmed_income),
-        "unreviewed_income_count": len(unreviewed_income),
+        "monthly_breakdown": monthly_breakdown,
+        "income_includes_unreviewed": has_unreviewed,
         "duplicate_count": sum(1 for t in txns if t.is_duplicate),
         "ambiguous_count": sum(1 for t in txns if t.is_ambiguous),
         "date_range": {

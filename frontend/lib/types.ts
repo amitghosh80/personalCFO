@@ -42,16 +42,19 @@ export interface UploadResult {
   status: string;
 }
 
+export interface MonthlyRow {
+  month: string;      // "YYYY-MM"
+  income: number;
+  expenses: number;
+  net: number;
+}
+
 export interface ImportSummary {
   import_job_id: string;
   status: string;
   total_transactions: number;
-  total_credits: number;
-  total_debits: number;
-  net_cash_flow: number;
-  confirmed_income: number;
-  confirmed_income_count: number;
-  unreviewed_income_count: number;
+  monthly_breakdown: MonthlyRow[];
+  income_includes_unreviewed: boolean;
   duplicate_count: number;
   ambiguous_count: number;
   date_range: { from: string | null; to: string | null };

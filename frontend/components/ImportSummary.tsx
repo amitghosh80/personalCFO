@@ -3,22 +3,31 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getImportSummary } from "@/lib/api";
-import type { ImportSummary as ImportSummaryType } from "@/lib/types";
+import type { ImportSummary as ImportSummaryType, MonthlyRow } from "@/lib/types";
 
-function StatCard({ label, value, sub, color = "text-gray-900" }: {
-  label: string; value: string; sub?: string; color?: string;
-}) {
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl px-5 py-4">
-      <p className="text-xs text-gray-400 mb-1">{label}</p>
-      <p className={`text-xl font-bold ${color}`}>{value}</p>
-      {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
-    </div>
-  );
+function formatMonth(yyyyMm: string) {
+  const [y, m] = yyyyMm.split("-").map(Number);
+  return new Date(y, m - 1).toLocaleString("en-US", { month: "short", year: "numeric" });
 }
 
 function fmt(n: number) {
-  return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2 });
+  return "$" + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2 });
+}
+
+function NetCell({ value }: { value: number }) {
+  const positive = value >= 0;
+  return (
+    <span className={`font-semibold tabular-nums ${positive ? "text-green-700" : "text-red-600"}`}>
+      {positive ? "+" : "−"}{fmt(value)}
+    </span>
+  );
+}
+
+function totals(rows: MonthlyRow[]) {
+  return rows.reduce(
+    (acc, r) => ({ income: acc.income + r.income, expenses: acc.expenses + r.expenses, net: acc.net + r.net }),
+    { income: 0, expenses: 0, net: 0 }
+  );
 }
 
 export default function ImportSummary({ jobId }: { jobId: string }) {
@@ -38,15 +47,14 @@ export default function ImportSummary({ jobId }: { jobId: string }) {
   if (error) return <div className="text-red-600">{error}</div>;
   if (!summary) return null;
 
-  const netPositive = summary.net_cash_flow >= 0;
+  const rows = summary.monthly_breakdown;
+  const total = totals(rows);
 
   return (
     <div>
+      {/* Header */}
       <div className="mb-6">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-2xl">✅</span>
-          <h2 className="text-2xl font-bold text-gray-900">Import Complete</h2>
-        </div>
+        <h2 className="text-2xl font-bold text-gray-900 mb-1">Import Complete</h2>
         <p className="text-gray-500">
           {summary.total_transactions} transactions imported
           {summary.date_range.from && summary.date_range.to
@@ -55,68 +63,75 @@ export default function ImportSummary({ jobId }: { jobId: string }) {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
-        <StatCard label="Total Credits" value={fmt(summary.total_credits)} color="text-green-700" />
-        <StatCard label="Total Debits" value={fmt(summary.total_debits)} color="text-red-600" />
-        <StatCard
-          label="Net Cash Flow"
-          value={fmt(Math.abs(summary.net_cash_flow))}
-          sub={netPositive ? "net positive" : "net negative"}
-          color={netPositive ? "text-green-700" : "text-red-600"}
-        />
-        <StatCard
-          label="Confirmed Income"
-          value={fmt(summary.confirmed_income)}
-          sub={`${summary.confirmed_income_count} transactions`}
-          color="text-blue-700"
-        />
-        {summary.unreviewed_income_count > 0 && (
-          <StatCard
-            label="Unreviewed Income"
-            value={`${summary.unreviewed_income_count}`}
-            sub="candidates not yet confirmed"
-            color="text-amber-600"
-          />
-        )}
-        {summary.duplicate_count > 0 && (
-          <StatCard
-            label="Duplicates Flagged"
-            value={`${summary.duplicate_count}`}
-            sub="may appear in another file"
-            color="text-orange-600"
-          />
-        )}
-        {summary.ambiguous_count > 0 && (
-          <StatCard
-            label="Ambiguous Items"
-            value={`${summary.ambiguous_count}`}
-            sub="rows that could not be parsed"
-            color="text-gray-500"
-          />
-        )}
-      </div>
-
-      {summary.unreviewed_income_count > 0 && (
-        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 flex items-start gap-3">
-          <span className="text-xl mt-0.5">⚠️</span>
-          <div>
-            <p className="font-medium text-amber-800">Income review incomplete</p>
-            <p className="text-sm text-amber-700 mt-0.5">
-              {summary.unreviewed_income_count} potential income transaction
-              {summary.unreviewed_income_count !== 1 ? "s were" : " was"} not reviewed.
-              Go back to confirm them for accurate reporting.
-            </p>
-            <button
-              onClick={() => router.push(`/import/${jobId}/income`)}
-              className="mt-2 text-sm font-medium text-amber-800 underline"
-            >
-              Review income →
-            </button>
-          </div>
+      {/* Monthly table */}
+      {rows.length > 0 ? (
+        <div className="mb-6 rounded-xl border border-gray-200 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200 text-left">
+                <th className="px-5 py-3 font-medium text-gray-500">Month</th>
+                <th className="px-5 py-3 font-medium text-gray-500 text-right">Income</th>
+                <th className="px-5 py-3 font-medium text-gray-500 text-right">Expenses</th>
+                <th className="px-5 py-3 font-medium text-gray-500 text-right">Net Cash Flow</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 bg-white">
+              {rows.map((r) => (
+                <tr key={r.month} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-5 py-3 text-gray-700 font-medium">{formatMonth(r.month)}</td>
+                  <td className="px-5 py-3 text-right tabular-nums text-green-700">{fmt(r.income)}</td>
+                  <td className="px-5 py-3 text-right tabular-nums text-red-600">{fmt(r.expenses)}</td>
+                  <td className="px-5 py-3 text-right"><NetCell value={r.net} /></td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-gray-50 border-t border-gray-200 font-semibold">
+                <td className="px-5 py-3 text-gray-700">Total</td>
+                <td className="px-5 py-3 text-right tabular-nums text-green-700">{fmt(total.income)}</td>
+                <td className="px-5 py-3 text-right tabular-nums text-red-600">{fmt(total.expenses)}</td>
+                <td className="px-5 py-3 text-right"><NetCell value={total.net} /></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      ) : (
+        <div className="mb-6 text-center py-10 text-gray-400 bg-white border border-gray-200 rounded-xl">
+          No transactions found for this import.
         </div>
       )}
 
+      {/* Footnote when income includes unreviewed candidates */}
+      {summary.income_includes_unreviewed && (
+        <p className="text-xs text-gray-400 -mt-4 mb-5 px-1">
+          * Income includes auto-detected candidates not yet confirmed. Go back to income review for accuracy.
+        </p>
+      )}
+
+      {/* Metadata pills */}
+      {(summary.duplicate_count > 0 || summary.ambiguous_count > 0) && (
+        <div className="flex flex-wrap gap-2 mb-6">
+          {summary.duplicate_count > 0 && (
+            <span className="text-xs px-3 py-1.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200">
+              {summary.duplicate_count} duplicate{summary.duplicate_count !== 1 ? "s" : ""} flagged
+            </span>
+          )}
+          {summary.ambiguous_count > 0 && (
+            <span className="text-xs px-3 py-1.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
+              {summary.ambiguous_count} row{summary.ambiguous_count !== 1 ? "s" : ""} could not be parsed
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Actions */}
       <div className="flex gap-3">
+        <button
+          onClick={() => router.push(`/import/${jobId}/income`)}
+          className="px-5 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
+        >
+          Review Income
+        </button>
         <button
           onClick={() => router.push(`/transactions?job=${jobId}`)}
           className="flex-1 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors"
@@ -125,7 +140,7 @@ export default function ImportSummary({ jobId }: { jobId: string }) {
         </button>
         <button
           onClick={() => router.push("/")}
-          className="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
+          className="px-5 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
         >
           Import More
         </button>
