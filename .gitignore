@@ -24,6 +24,13 @@ frontend/.next/
 frontend/node_modules/
 frontend/out/
 
+# PDF statements (never commit real financial documents)
+*.pdf
+
+# Scratch / debug scripts
+backend/debug_pdf.py
+backend/test_*.py
+
 # OS
 .DS_Store
 Thumbs.db

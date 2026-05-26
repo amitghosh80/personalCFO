@@ -27,6 +27,30 @@ npm run build
 npm run lint
 ```
 
+### Tests (income classification regression suite)
+```powershell
+# From backend/ — install pytest once, then run any time classification logic changes
+pip install pytest
+pytest tests/test_income_classification.py -v
+pytest tests/test_income_classification.py -v --tb=short   # brief failure detail
+pytest tests/test_income_classification.py -v -k "FirstTech"  # one class only
+```
+
+The suite (53 tests, ~12 s) parses 8 real PDF statements and asserts expected
+classification for every ground-truth transaction from the user-reviewed Excel.
+PDF files are read from `C:\Users\amitg\Downloads\` by default; override with:
+```powershell
+$env:INCOME_TEST_PDF_DIR = "C:\path\to\pdfs"
+pytest tests/test_income_classification.py -v
+```
+PDFs are in `.gitignore` — they must exist on disk but are never committed.
+Tests skip gracefully for any file that is not found.
+
+**Run the suite before committing any change to:**
+- `backend/app/parsers/pdf_parser.py`
+- `backend/app/services/income_classifier.py`
+- `backend/app/parsers/institution_profiles.py`
+
 ### Environment
 Copy `backend/.env.example` to `backend/.env` and fill in `ENCRYPTION_KEY`. The SQLite database (`personalcfo.db`) is created automatically on first run in the directory where uvicorn is launched.
 
@@ -46,8 +70,8 @@ The frontend mirrors this: `app/page.tsx` → upload → redirects to `/import/[
 - **`config.py`** — Pydantic settings loaded from `.env`; `get_fernet()` provides the Fernet instance for encryption.
 - **`database.py`** — SQLite engine via SQLModel; `get_session()` is the FastAPI dependency.
 - **`models/`** — Two SQLModel tables: `Transaction` (all fields) and `ImportJob` (tracks job status: `processing → pending_income_review → completed`). Transaction `description` is stored as `bytes` (Fernet-encrypted).
-- **`parsers/`** — `csv_parser.py` detects the bank via `institution_profiles.py` (column-matching scored 0.7–1.0), then extracts rows. `pdf_parser.py` uses `pdfplumber` with table extraction first, line-by-line regex fallback if tables yield nothing.
-- **`services/`** — `income_classifier.py` uses regex pattern lists (`_SALARY`, `_INTEREST`, `_RENTAL`, `_GIG`, `_NOT_INCOME`) to classify credits; credits ≥$500 with no match are flagged as `other`. `duplicate_detector.py` flags a transaction if an identical (date + amount + type) exists from a *different* source file hash. `encryption.py` wraps Fernet encrypt/decrypt.
+- **`parsers/`** — `csv_parser.py` detects the bank via `institution_profiles.py` (column-matching scored 0.7–1.0), then extracts rows. `pdf_parser.py` uses `pdfplumber` with table extraction first, line-by-line regex fallback if tables yield nothing. Institution is detected from **first-page text only** to avoid false matches on institution names that appear inside transaction descriptions (e.g. "AMEX EPAYMENT" in a First Tech checking statement). Sign convention is detected via `_needs_pdf_sign_inversion()`: if a payment-acknowledgment line (e.g. "Payment Thank You") carries a negative amount, the document uses positive=charge convention and all signs are inverted. This correctly handles Chase and Amex credit card PDFs.
+- **`services/`** — `income_classifier.py` uses regex pattern lists (`_SALARY`, `_INTEREST`, `_RENTAL`, `_GIG`, `_NOT_INCOME`, `_EXCLUDE_FROM_REVIEW`) to classify credits. Credits ≥$500 with no match are flagged as `other`. `_NOT_INCOME` excludes transfers, CC payments, refunds, rewards, and explicit outflows (ACH Debit, ATM Withdrawal, POS Transaction). `_EXCLUDE_FROM_REVIEW` is a stricter subset: credit transactions matching it are hidden from the income-review UI entirely (CC payment confirmations, statement metadata). `exclude_from_review()` is called in the income-review endpoint after decryption. `duplicate_detector.py` flags a transaction if an identical (date + amount + type) exists from a *different* source file hash. `encryption.py` wraps Fernet encrypt/decrypt.
 
 ### Institution Profiles (CSV)
 `institution_profiles.py` defines `InstitutionProfile` dataclasses for Chase, Bank of America, Citi, Capital One, American Express, and Wells Fargo. Each profile specifies which columns are required/optional, how to read the date, and whether to use a single signed `amount_col` or separate `debit_col`/`credit_col`. American Express uses `invert_sign=True` (positive = charge). Detection requires all required columns to be present; optional columns raise the confidence score above the 0.7 threshold.
