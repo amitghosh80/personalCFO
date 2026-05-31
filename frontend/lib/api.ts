@@ -1,4 +1,4 @@
-import type { FileResult, ImportSummary, Transaction, UploadResult } from "./types";
+import type { FileResult, ImportSummary, InsightFeedResponse, Transaction, UploadResult } from "./types";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -43,6 +43,29 @@ export async function confirmIncome(
 export async function getImportSummary(jobId: string): Promise<ImportSummary> {
   const res = await fetch(`${API}/api/import/${jobId}/summary`);
   return handleResponse<ImportSummary>(res);
+}
+
+export async function generateInsights(jobId: string): Promise<{ job_id: string; insights_generated: number; insight_ids: number[] }> {
+  const res = await fetch(`${API}/api/import/${jobId}/generate-insights`, { method: "POST" });
+  return handleResponse(res);
+}
+
+export async function getInsights(params?: {
+  severity?: string;
+  type?: string;
+  include_dismissed?: boolean;
+}): Promise<InsightFeedResponse> {
+  const url = new URL(`${API}/api/insights`);
+  if (params?.severity) url.searchParams.set("severity", params.severity);
+  if (params?.type) url.searchParams.set("type", params.type);
+  if (params?.include_dismissed) url.searchParams.set("include_dismissed", "true");
+  const res = await fetch(url.toString());
+  return handleResponse(res);
+}
+
+export async function dismissInsight(insightId: number): Promise<{ id: number; is_dismissed: boolean }> {
+  const res = await fetch(`${API}/api/insights/${insightId}/dismiss`, { method: "PATCH" });
+  return handleResponse(res);
 }
 
 export async function getTransactions(jobId?: string): Promise<Transaction[]> {

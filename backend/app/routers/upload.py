@@ -12,6 +12,7 @@ from ..parsers.csv_parser import parse_csv
 from ..parsers.pdf_parser import parse_pdf
 from ..services.duplicate_detector import is_duplicate
 from ..services.encryption import encrypt
+from ..services.expense_categorizer import categorize_expense
 from ..services.income_classifier import classify_income
 from ..config import get_settings
 
@@ -87,6 +88,12 @@ async def upload_statements(
                 file_hash,
             )
 
+            exp_cat = (
+                categorize_expense(txn_data["description"])
+                if txn_data["transaction_type"] == TransactionType.debit
+                else None
+            )
+
             txn = Transaction(
                 import_job_id=job_id,
                 date=txn_data["date"],
@@ -98,6 +105,7 @@ async def upload_statements(
                 source_file_hash=file_hash,
                 is_income_candidate=is_candidate,
                 income_category=income_cat.value if income_cat else None,
+                expense_category=exp_cat,
                 is_duplicate=is_dup,
             )
             session.add(txn)

@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     encryption_key: str = ""
     database_url: str = "sqlite:///./personalcfo.db"
     max_upload_size_mb: int = 10
+    anthropic_api_key: str = ""
+    ai_categorizer_model: str = "claude-haiku-4-5"
 
     class Config:
         env_file = ".env"

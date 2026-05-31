@@ -4,12 +4,40 @@ import { useEffect, useMemo, useState } from "react";
 import { getTransactions } from "@/lib/api";
 import type { Transaction } from "@/lib/types";
 
-const CATEGORY_LABELS: Record<string, string> = {
+const INCOME_LABELS: Record<string, string> = {
   salary: "Salary",
   interest: "Interest",
   rental: "Rental",
   gig: "Gig",
   other: "Other Income",
+};
+
+const EXPENSE_LABELS: Record<string, string> = {
+  dining: "Dining",
+  groceries: "Groceries",
+  subscriptions: "Subscriptions",
+  entertainment: "Entertainment",
+  gas_auto: "Gas & Auto",
+  travel: "Travel",
+  healthcare: "Healthcare",
+  utilities: "Utilities",
+  housing: "Housing",
+  shopping: "Shopping",
+  other: "Other",
+};
+
+const EXPENSE_COLORS: Record<string, string> = {
+  dining: "bg-orange-50 text-orange-700",
+  groceries: "bg-emerald-50 text-emerald-700",
+  subscriptions: "bg-purple-50 text-purple-700",
+  entertainment: "bg-pink-50 text-pink-700",
+  gas_auto: "bg-slate-100 text-slate-600",
+  travel: "bg-sky-50 text-sky-700",
+  healthcare: "bg-red-50 text-red-700",
+  utilities: "bg-yellow-50 text-yellow-700",
+  housing: "bg-amber-50 text-amber-700",
+  shopping: "bg-indigo-50 text-indigo-700",
+  other: "bg-gray-100 text-gray-500",
 };
 
 function Badge({ label, color }: { label: string; color: string }) {
@@ -122,9 +150,15 @@ export default function TransactionTable({ jobId }: { jobId?: string }) {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1 flex-wrap">
+                      {t.transaction_type === "debit" && t.expense_category && t.expense_category !== "other" && (
+                        <Badge
+                          label={EXPENSE_LABELS[t.expense_category] ?? t.expense_category}
+                          color={EXPENSE_COLORS[t.expense_category] ?? "bg-gray-100 text-gray-500"}
+                        />
+                      )}
                       {t.income_confirmed === true && t.income_category && (
                         <Badge
-                          label={CATEGORY_LABELS[t.income_category] ?? t.income_category}
+                          label={INCOME_LABELS[t.income_category] ?? t.income_category}
                           color="bg-green-100 text-green-800"
                         />
                       )}

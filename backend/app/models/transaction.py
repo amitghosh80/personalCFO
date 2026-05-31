@@ -33,6 +33,10 @@ class Transaction(SQLModel, table=True):
     income_category: Optional[str] = Field(default=None)  # IncomeCategory value
     income_confirmed: Optional[bool] = Field(default=None)  # None=unreviewed
 
+    expense_category: Optional[str] = Field(default=None)       # primary taxonomy key
+    expense_subcategory: Optional[str] = Field(default=None)    # detailed taxonomy key
+    category_source: Optional[str] = Field(default=None)        # "rule" | "ai" | "fallback"
+
     is_ambiguous: bool = Field(default=False)
     ambiguity_reason: Optional[str] = Field(default=None)
     is_duplicate: bool = Field(default=False)

@@ -1,9 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getImportSummary } from "@/lib/api";
+import { generateInsights, getImportSummary } from "@/lib/api";
 import type { ImportSummary as ImportSummaryType, MonthlyRow } from "@/lib/types";
+
+const CATEGORY_COLORS: Record<string, string> = {
+  dining: "bg-rose-400",
+  groceries: "bg-lime-500",
+  subscriptions: "bg-violet-400",
+  entertainment: "bg-fuchsia-400",
+  gas_auto: "bg-amber-500",
+  travel: "bg-sky-400",
+  healthcare: "bg-emerald-400",
+  utilities: "bg-cyan-500",
+  housing: "bg-orange-400",
+  shopping: "bg-indigo-400",
+  other: "bg-gray-400",
+};
 
 function formatMonth(yyyyMm: string) {
   const [y, m] = yyyyMm.split("-").map(Number);
@@ -30,17 +44,58 @@ function totals(rows: MonthlyRow[]) {
   );
 }
 
+function CategoryBars({ row }: { row: MonthlyRow }) {
+  const cats = row.top_categories ?? [];
+  if (cats.length === 0) {
+    return <div className="px-5 py-3 text-sm text-gray-400">No categorized expenses this month.</div>;
+  }
+  const max = Math.max(...cats.map((c) => c.amount), 1);
+  return (
+    <div className="px-5 py-4 space-y-2">
+      <div className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-1">
+        Top expense categories
+      </div>
+      {cats.map((c) => (
+        <div key={c.category} className="flex items-center gap-3">
+          <div className="w-28 shrink-0 text-sm text-gray-600">{c.display}</div>
+          <div className="flex-1 h-5 rounded bg-gray-100 overflow-hidden">
+            <div
+              className={`h-full ${CATEGORY_COLORS[c.category] ?? "bg-gray-400"}`}
+              style={{ width: `${Math.max((c.amount / max) * 100, 2)}%` }}
+            />
+          </div>
+          <div className="w-24 shrink-0 text-right text-sm tabular-nums text-gray-700">{fmt(c.amount)}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function ImportSummary({ jobId }: { jobId: string }) {
   const router = useRouter();
   const [summary, setSummary] = useState<ImportSummaryType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggle = (month: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      next.has(month) ? next.delete(month) : next.add(month);
+      return next;
+    });
 
   useEffect(() => {
     getImportSummary(jobId)
-      .then(setSummary)
+      .then((s) => {
+        setSummary(s);
+        // Show every month's category breakdown by default
+        setExpanded(new Set(s.monthly_breakdown.map((r) => r.month)));
+      })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+    // Trigger insight generation in the background; ignore errors
+    generateInsights(jobId).catch(() => {});
   }, [jobId]);
 
   if (loading) return <div className="text-gray-500">Loading summary…</div>;
@@ -76,14 +131,38 @@ export default function ImportSummary({ jobId }: { jobId: string }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 bg-white">
-              {rows.map((r) => (
-                <tr key={r.month} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-5 py-3 text-gray-700 font-medium">{formatMonth(r.month)}</td>
-                  <td className="px-5 py-3 text-right tabular-nums text-green-700">{fmt(r.income)}</td>
-                  <td className="px-5 py-3 text-right tabular-nums text-red-600">{fmt(r.expenses)}</td>
-                  <td className="px-5 py-3 text-right"><NetCell value={r.net} /></td>
-                </tr>
-              ))}
+              {rows.map((r) => {
+                const isOpen = expanded.has(r.month);
+                return (
+                  <Fragment key={r.month}>
+                    <tr
+                      className="hover:bg-gray-50 transition-colors cursor-pointer"
+                      onClick={() => toggle(r.month)}
+                    >
+                      <td className="px-5 py-3 text-gray-700 font-medium">
+                        <span className="inline-flex items-center gap-2">
+                          <span
+                            className={`text-gray-400 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                          >
+                            ▸
+                          </span>
+                          {formatMonth(r.month)}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-right tabular-nums text-green-700">{fmt(r.income)}</td>
+                      <td className="px-5 py-3 text-right tabular-nums text-red-600">{fmt(r.expenses)}</td>
+                      <td className="px-5 py-3 text-right"><NetCell value={r.net} /></td>
+                    </tr>
+                    {isOpen && (
+                      <tr className="bg-gray-50/60">
+                        <td colSpan={4} className="border-t border-gray-100 p-0">
+                          <CategoryBars row={r} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
             <tfoot>
               <tr className="bg-gray-50 border-t border-gray-200 font-semibold">
@@ -137,6 +216,12 @@ export default function ImportSummary({ jobId }: { jobId: string }) {
           className="flex-1 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors"
         >
           View Transactions
+        </button>
+        <button
+          onClick={() => router.push("/insights")}
+          className="px-5 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
+        >
+          View Insights
         </button>
         <button
           onClick={() => router.push("/")}
