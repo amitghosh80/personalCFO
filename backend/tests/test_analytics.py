@@ -98,3 +98,43 @@ def test_spending_by_category_filtered_to_one_primary(make_txn):
     assert out["total_spending"] == 60.0
     assert len(out["by_primary"]) == 1
     assert out["by_primary"][0]["category"] == "transportation"
+
+
+def test_cashflow_summary_totals_and_by_month(make_txn):
+    s = make_txn.__self_session__
+    make_txn(day="2026-05-01", amount=3000.0, txn_type=TransactionType.credit,
+             description="ACME PAYROLL", is_income_candidate=True, income_confirmed=True,
+             income_category="salary")
+    make_txn(day="2026-05-05", amount=200.0, txn_type=TransactionType.debit,
+             description="SAFEWAY", expense_category="food_and_drink")
+    make_txn(day="2026-06-05", amount=100.0, txn_type=TransactionType.debit,
+             description="SHELL", expense_category="transportation")
+
+    out = analytics.cashflow_summary(s, {"start": "2026-05-01", "end": "2026-06-30"}, today=TODAY)
+    assert out["total_credits"] == 3000.0
+    assert out["total_debits"] == 300.0
+    assert out["net_cashflow"] == 2700.0
+    assert out["confirmed_income"] == 3000.0
+    months = {m["month"]: m for m in out["by_month"]}
+    assert months["2026-05"]["debits"] == 200.0
+    assert months["2026-06"]["debits"] == 100.0
+
+
+def test_income_summary_prefers_confirmed_and_groups_by_category(make_txn):
+    s = make_txn.__self_session__
+    make_txn(day="2026-05-01", amount=3000.0, txn_type=TransactionType.credit,
+             description="ACME PAYROLL", is_income_candidate=True, income_confirmed=True,
+             income_category="salary")
+    make_txn(day="2026-05-20", amount=50.0, txn_type=TransactionType.credit,
+             description="SAVINGS INTEREST", is_income_candidate=True, income_confirmed=True,
+             income_category="interest")
+    # Unconfirmed candidate is ignored once confirmed income exists.
+    make_txn(day="2026-05-25", amount=999.0, txn_type=TransactionType.credit,
+             description="MAYBE INCOME", is_income_candidate=True, income_confirmed=None,
+             income_category="other")
+
+    out = analytics.income_summary(s, {"month": "2026-05"}, today=TODAY)
+    assert out["basis"] == "confirmed"
+    assert out["total_income"] == 3050.0
+    by_cat = {c["category"]: c["amount"] for c in out["by_category"]}
+    assert by_cat == {"salary": 3000.0, "interest": 50.0}

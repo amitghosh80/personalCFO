@@ -203,3 +203,79 @@ def spending_by_category(
         "transaction_count": len(txns),
         "by_primary": primaries,
     }
+
+
+def cashflow_summary(session: Session, period: dict | None = None, today: date | None = None) -> dict:
+    """Money in vs out for the period. Debits here are ALL outflows (not just
+    spending), so net reflects actual account movement; use spending_by_category
+    for consumption-only totals."""
+    start, end, label = resolve_period(period, today)
+    txns = [t for t in load_ledger(session) if _in_range(t, start, end)]
+
+    credits = sum(t["amount"] for t in txns if t["type"] == TransactionType.credit)
+    debits = sum(t["amount"] for t in txns if t["type"] == TransactionType.debit)
+    confirmed_income = sum(
+        t["amount"] for t in txns
+        if t["type"] == TransactionType.credit and t["income_confirmed"] is True
+    )
+
+    by_month: dict[str, dict] = defaultdict(lambda: {"credits": 0.0, "debits": 0.0, "income": 0.0})
+    for t in txns:
+        bucket = by_month[t["month"]]
+        if t["type"] == TransactionType.credit:
+            bucket["credits"] += t["amount"]
+            if t["income_confirmed"] is True:
+                bucket["income"] += t["amount"]
+        else:
+            bucket["debits"] += t["amount"]
+
+    months = [
+        {"month": m, "credits": round(v["credits"], 2), "debits": round(v["debits"], 2),
+         "net": round(v["credits"] - v["debits"], 2), "income": round(v["income"], 2)}
+        for m, v in sorted(by_month.items())
+    ]
+
+    return {
+        "period": {"start": start.isoformat(), "end": end.isoformat(), "label": label},
+        "total_credits": round(credits, 2),
+        "total_debits": round(debits, 2),
+        "net_cashflow": round(credits - debits, 2),
+        "confirmed_income": round(confirmed_income, 2),
+        "by_month": months,
+    }
+
+
+def income_summary(session: Session, period: dict | None = None, today: date | None = None) -> dict:
+    """Income for the period, by income category. Prefers confirmed income; if
+    none is confirmed in the period, falls back to income candidates and flags
+    the basis so the model can caveat the answer."""
+    start, end, label = resolve_period(period, today)
+    credits = [
+        t for t in load_ledger(session)
+        if _in_range(t, start, end) and t["type"] == TransactionType.credit
+    ]
+
+    confirmed = [t for t in credits if t["income_confirmed"] is True]
+    if confirmed:
+        basis, income_txns = "confirmed", confirmed
+    else:
+        basis = "candidate_included"
+        income_txns = [t for t in credits if t["is_income_candidate"] and t["income_confirmed"] is None]
+
+    by_cat: dict[str, dict] = defaultdict(lambda: {"amount": 0.0, "count": 0})
+    for t in income_txns:
+        c = by_cat[t["income_category"]]
+        c["amount"] += t["amount"]
+        c["count"] += 1
+
+    categories = [
+        {"category": k, "amount": round(v["amount"], 2), "count": v["count"]}
+        for k, v in sorted(by_cat.items(), key=lambda kv: kv[1]["amount"], reverse=True)
+    ]
+
+    return {
+        "period": {"start": start.isoformat(), "end": end.isoformat(), "label": label},
+        "basis": basis,
+        "total_income": round(sum(t["amount"] for t in income_txns), 2),
+        "by_category": categories,
+    }
