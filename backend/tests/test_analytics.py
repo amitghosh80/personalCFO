@@ -59,3 +59,42 @@ def test_resolve_period_presets_relative_to_today():
 # Helper so tests can reach the session the factory writes to.
 def _session_of(make_txn):
     return make_txn.__self_session__
+
+
+def test_spending_by_category_groups_and_excludes_non_spending(make_txn):
+    s = make_txn.__self_session__
+    make_txn(day="2026-05-02", amount=100.0, txn_type=TransactionType.debit,
+             description="SAFEWAY", expense_category="food_and_drink", expense_subcategory="groceries")
+    make_txn(day="2026-05-10", amount=40.0, txn_type=TransactionType.debit,
+             description="CHIPOTLE", expense_category="food_and_drink", expense_subcategory="restaurant")
+    make_txn(day="2026-05-15", amount=60.0, txn_type=TransactionType.debit,
+             description="SHELL", expense_category="transportation", expense_subcategory="gas")
+    # Non-spending: a credit-card payment debit must be excluded.
+    make_txn(day="2026-05-20", amount=500.0, txn_type=TransactionType.debit,
+             description="CHASE CARD PAYMENT", expense_category="credit_card_payment")
+    # Out of period: ignored.
+    make_txn(day="2026-04-01", amount=999.0, txn_type=TransactionType.debit,
+             description="OLD", expense_category="shopping")
+
+    out = analytics.spending_by_category(s, {"month": "2026-05"}, today=TODAY)
+
+    assert out["total_spending"] == 200.0
+    assert out["transaction_count"] == 3
+    top = out["by_primary"][0]
+    assert top["category"] == "food_and_drink"
+    assert top["amount"] == 140.0
+    subs = {x["subcategory"]: x["amount"] for x in top["by_subcategory"]}
+    assert subs == {"groceries": 100.0, "restaurant": 40.0}
+
+
+def test_spending_by_category_filtered_to_one_primary(make_txn):
+    s = make_txn.__self_session__
+    make_txn(day="2026-05-02", amount=100.0, txn_type=TransactionType.debit,
+             description="SAFEWAY", expense_category="food_and_drink", expense_subcategory="groceries")
+    make_txn(day="2026-05-15", amount=60.0, txn_type=TransactionType.debit,
+             description="SHELL", expense_category="transportation", expense_subcategory="gas")
+
+    out = analytics.spending_by_category(s, {"month": "2026-05"}, primary="transportation", today=TODAY)
+    assert out["total_spending"] == 60.0
+    assert len(out["by_primary"]) == 1
+    assert out["by_primary"][0]["category"] == "transportation"

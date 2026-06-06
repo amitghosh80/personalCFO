@@ -156,3 +156,50 @@ def resolve_period(period: dict | None, today: date | None = None) -> tuple[date
         return _month_start(y, m), today, f"last {n} months"
 
     raise ValueError(f"Unknown period spec: {period}")
+
+
+def spending_by_category(
+    session: Session,
+    period: dict | None = None,
+    primary: str | None = None,
+    today: date | None = None,
+) -> dict:
+    """Total spending broken down by primary category and subcategory.
+
+    Excludes money movement (transfers, credit-card payments, investments) so
+    'how much did I spend' is never inflated by offsetting transactions.
+    """
+    start, end, label = resolve_period(period, today)
+    txns = [t for t in load_ledger(session) if _in_range(t, start, end) and is_spending_txn(t)]
+    if primary:
+        txns = [t for t in txns if t["expense_category"] == primary]
+
+    by_primary: dict[str, dict] = defaultdict(lambda: {"amount": 0.0, "count": 0, "subs": defaultdict(lambda: {"amount": 0.0, "count": 0})})
+    for t in txns:
+        p = by_primary[t["expense_category"]]
+        p["amount"] += t["amount"]
+        p["count"] += 1
+        sub = p["subs"][t["expense_subcategory"]]
+        sub["amount"] += t["amount"]
+        sub["count"] += 1
+
+    primaries = []
+    for cat, data in by_primary.items():
+        subs = [
+            {"subcategory": sk, "display": subcategory_display(sk),
+             "amount": round(sv["amount"], 2), "count": sv["count"]}
+            for sk, sv in sorted(data["subs"].items(), key=lambda kv: kv[1]["amount"], reverse=True)
+        ]
+        primaries.append({
+            "category": cat, "display": primary_display(cat),
+            "amount": round(data["amount"], 2), "count": data["count"],
+            "by_subcategory": subs,
+        })
+    primaries.sort(key=lambda x: x["amount"], reverse=True)
+
+    return {
+        "period": {"start": start.isoformat(), "end": end.isoformat(), "label": label},
+        "total_spending": round(sum(t["amount"] for t in txns), 2),
+        "transaction_count": len(txns),
+        "by_primary": primaries,
+    }
