@@ -5,18 +5,30 @@ import { useRouter } from "next/navigation";
 import { generateInsights, getImportSummary } from "@/lib/api";
 import type { ImportSummary as ImportSummaryType, MonthlyRow } from "@/lib/types";
 
+// Keys mirror backend TAXONOMY primaries in expense_categorizer.py.
 const CATEGORY_COLORS: Record<string, string> = {
-  dining: "bg-rose-400",
-  groceries: "bg-lime-500",
-  subscriptions: "bg-violet-400",
-  entertainment: "bg-fuchsia-400",
-  gas_auto: "bg-amber-500",
-  travel: "bg-sky-400",
-  healthcare: "bg-emerald-400",
-  utilities: "bg-cyan-500",
   housing: "bg-orange-400",
+  utilities: "bg-cyan-500",
+  food_and_drink: "bg-rose-400",
+  transportation: "bg-amber-500",
+  travel: "bg-sky-400",
   shopping: "bg-indigo-400",
+  entertainment: "bg-fuchsia-400",
+  subscriptions: "bg-violet-400",
+  health: "bg-emerald-400",
+  personal_care: "bg-pink-400",
+  insurance: "bg-teal-400",
+  debt_payments: "bg-stone-500",
+  education: "bg-blue-400",
+  pets: "bg-lime-500",
+  financial: "bg-zinc-400",
+  taxes: "bg-red-500",
+  gifts_donations: "bg-fuchsia-500",
+  cash: "bg-green-500",
   other: "bg-gray-400",
+  credit_card_payment: "bg-gray-400",
+  transfer: "bg-gray-400",
+  investment: "bg-cyan-400",
 };
 
 function formatMonth(yyyyMm: string) {

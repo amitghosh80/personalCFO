@@ -37,7 +37,10 @@ def _backfill_expense_categories():
         ).all()
         for t in txns:
             try:
-                t.expense_category = categorize_expense(decrypt(t.description))
+                primary, sub, source = categorize_expense(decrypt(t.description))
+                t.expense_category = primary
+                t.expense_subcategory = sub
+                t.category_source = source
                 session.add(t)
             except Exception:
                 pass

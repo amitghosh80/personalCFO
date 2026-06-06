@@ -57,18 +57,30 @@ export interface MonthlyRow {
   top_categories: CategoryBreakdown[];
 }
 
+// Primary keys mirror backend TAXONOMY in expense_categorizer.py.
 export type ExpenseCategory =
-  | "dining"
-  | "groceries"
-  | "subscriptions"
-  | "entertainment"
-  | "gas_auto"
-  | "travel"
-  | "healthcare"
-  | "utilities"
   | "housing"
+  | "utilities"
+  | "food_and_drink"
+  | "transportation"
+  | "travel"
   | "shopping"
-  | "other";
+  | "entertainment"
+  | "subscriptions"
+  | "health"
+  | "personal_care"
+  | "insurance"
+  | "debt_payments"
+  | "education"
+  | "pets"
+  | "financial"
+  | "taxes"
+  | "gifts_donations"
+  | "cash"
+  | "other"
+  | "credit_card_payment"
+  | "transfer"
+  | "investment";
 
 export type InsightType =
   | "spending_increase"

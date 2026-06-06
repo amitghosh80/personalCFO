@@ -88,11 +88,10 @@ async def upload_statements(
                 file_hash,
             )
 
-            exp_cat = (
-                categorize_expense(txn_data["description"])
-                if txn_data["transaction_type"] == TransactionType.debit
-                else None
-            )
+            if txn_data["transaction_type"] == TransactionType.debit:
+                exp_primary, exp_sub, exp_source = categorize_expense(txn_data["description"])
+            else:
+                exp_primary, exp_sub, exp_source = None, None, None
 
             txn = Transaction(
                 import_job_id=job_id,
@@ -105,7 +104,9 @@ async def upload_statements(
                 source_file_hash=file_hash,
                 is_income_candidate=is_candidate,
                 income_category=income_cat.value if income_cat else None,
-                expense_category=exp_cat,
+                expense_category=exp_primary,
+                expense_subcategory=exp_sub,
+                category_source=exp_source,
                 is_duplicate=is_dup,
             )
             session.add(txn)

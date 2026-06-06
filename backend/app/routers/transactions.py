@@ -100,7 +100,7 @@ def confirm_income(
 @router.get("/import/{job_id}/summary")
 def get_import_summary(job_id: str, session: Session = Depends(get_session)):
     from collections import defaultdict
-    from ..services.expense_categorizer import CATEGORY_DISPLAY, ExpenseCategory
+    from ..services.expense_categorizer import CATEGORY_DISPLAY, is_spending
 
     # How many expense categories to surface per month
     TOP_N_CATEGORIES = 5
@@ -120,7 +120,7 @@ def get_import_summary(job_id: str, session: Session = Depends(get_session)):
         key = t.date.strftime("%Y-%m")
         if t.transaction_type == TransactionType.debit:
             buckets[key]["expenses"] += t.amount
-            cat = t.expense_category or ExpenseCategory.other
+            cat = t.expense_category or "other"
             cat_buckets[key][cat] += t.amount
         elif t.transaction_type == TransactionType.credit:
             # Confirmed income, or auto-detected candidate not yet reviewed
