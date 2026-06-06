@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     max_upload_size_mb: int = 10
     anthropic_api_key: str = ""
     ai_categorizer_model: str = "claude-haiku-4-5"
+    chat_model: str = "claude-sonnet-4-6"
 
     class Config:
         env_file = ".env"
