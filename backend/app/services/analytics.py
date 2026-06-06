@@ -361,3 +361,51 @@ def recurring_charges(session: Session, primary: str | None = None, today: date 
     if primary:
         recurring = [r for r in recurring if r["category"] == primary]
     return {"recurring": recurring}
+
+
+_SEARCH_HARD_CAP = 100
+
+
+def search_transactions(
+    session: Session,
+    period: dict | None = None,
+    primary: str | None = None,
+    subcategory: str | None = None,
+    min_amount: float | None = None,
+    max_amount: float | None = None,
+    merchant_contains: str | None = None,
+    txn_type: str | None = None,
+    limit: int = 50,
+    today: date | None = None,
+) -> dict:
+    """Return individual line items matching filters. The ONLY tool that exposes
+    raw descriptions; results are hard-capped at 100 rows."""
+    limit = max(1, min(int(limit), _SEARCH_HARD_CAP))
+    txns = load_ledger(session)
+
+    if period:
+        start, end, _ = resolve_period(period, today)
+        txns = [t for t in txns if _in_range(t, start, end)]
+    if primary:
+        txns = [t for t in txns if t["expense_category"] == primary]
+    if subcategory:
+        txns = [t for t in txns if t["expense_subcategory"] == subcategory]
+    if min_amount is not None:
+        txns = [t for t in txns if t["amount"] >= min_amount]
+    if max_amount is not None:
+        txns = [t for t in txns if t["amount"] <= max_amount]
+    if merchant_contains:
+        needle = merchant_contains.lower()
+        txns = [t for t in txns if needle in t["description"].lower()]
+    if txn_type in ("debit", "credit"):
+        txns = [t for t in txns if t["type"].value == txn_type]
+
+    txns.sort(key=lambda t: t["date"], reverse=True)
+    truncated = len(txns) > limit
+    rows = [
+        {"id": t["id"], "date": t["date"].isoformat(), "description": t["description"],
+         "amount": round(t["amount"], 2), "type": t["type"].value,
+         "category": t["expense_category"], "subcategory": t["expense_subcategory"]}
+        for t in txns[:limit]
+    ]
+    return {"transactions": rows, "returned": len(rows), "truncated": truncated, "limit": limit}

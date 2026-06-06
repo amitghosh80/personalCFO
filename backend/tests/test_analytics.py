@@ -173,3 +173,29 @@ def test_recurring_charges_detects_monthly_merchant(make_txn):
     assert netflix["typical_amount"] == 15.99
     assert netflix["cadence"] == "monthly"
     assert "RANDOM SHOP" not in merchants
+
+
+def test_search_transactions_filters_and_caps(make_txn):
+    s = make_txn.__self_session__
+    for i in range(5):
+        make_txn(day=f"2026-05-0{i + 1}", amount=10.0 + i, txn_type=TransactionType.debit,
+                 description=f"COFFEE SHOP {i}", expense_category="food_and_drink",
+                 expense_subcategory="coffee")
+    make_txn(day="2026-05-10", amount=500.0, txn_type=TransactionType.debit,
+             description="BIG TV", expense_category="shopping")
+
+    # Filter by merchant substring (case-insensitive).
+    out = analytics.search_transactions(s, merchant_contains="coffee", today=TODAY)
+    assert out["returned"] == 5
+    assert all("COFFEE" in t["description"] for t in out["transactions"])
+
+    # Filter by amount.
+    out = analytics.search_transactions(s, min_amount=100.0, today=TODAY)
+    assert out["returned"] == 1
+    assert out["transactions"][0]["description"] == "BIG TV"
+
+    # Cap enforced.
+    out = analytics.search_transactions(s, limit=2, today=TODAY)
+    assert out["returned"] == 2
+    assert out["truncated"] is True
+    assert out["limit"] == 2
