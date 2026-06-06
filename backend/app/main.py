@@ -5,6 +5,7 @@ from .database import create_db_and_tables, get_engine
 from .models import Insight  # noqa: F401 — ensures table is registered before create_all
 from .routers import upload, transactions
 from .routers import insights
+from .routers import chat
 
 
 def _migrate():
@@ -74,3 +75,4 @@ app.add_middleware(
 app.include_router(upload.router)
 app.include_router(transactions.router)
 app.include_router(insights.router)
+app.include_router(chat.router)

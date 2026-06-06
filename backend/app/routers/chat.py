@@ -1,0 +1,29 @@
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlmodel import Session
+
+from ..database import get_session
+from ..services.chat_service import answer_question
+
+router = APIRouter(prefix="/api", tags=["chat"])
+
+
+class ChatMessageIn(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRequest(BaseModel):
+    question: str
+    history: list[ChatMessageIn] = []
+
+
+@router.post("/chat")
+def chat(req: ChatRequest, session: Session = Depends(get_session)):
+    history = [{"role": m.role, "content": m.content} for m in req.history]
+    try:
+        return answer_question(session, req.question, history)
+    except RuntimeError as e:  # config problem (e.g. missing API key)
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:  # upstream/model failure
+        raise HTTPException(status_code=502, detail=f"Chat failed: {e}")
