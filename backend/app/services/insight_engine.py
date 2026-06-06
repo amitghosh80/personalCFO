@@ -9,18 +9,13 @@ from typing import Optional
 from sqlmodel import Session, select
 
 from ..models.insight import Insight, InsightType, Severity
-from ..models.transaction import Transaction, TransactionType
-from ..services.encryption import decrypt
+from ..models.transaction import TransactionType
 from ..services.expense_categorizer import CATEGORY_DISPLAY
+from ..services.analytics import load_ledger, is_transfer as _is_transfer
 
+_load_txns = load_ledger
 
 # ─── Constants ───────────────────────────────────────────────────────────────
-
-_TRANSFER_RE = re.compile(
-    r"transfer|zelle|wire|ach\s+(deposit|debit|credit)|"
-    r"ext\s+trnsf|from\s+checking|to\s+savings|jpmorgan\s+chase\s+ext",
-    re.IGNORECASE,
-)
 
 _KNOWN_SUBS = {
     "NETFLIX", "SPOTIFY", "HULU", "DISNEY+", "AMAZON PRIME", "APPLE",
@@ -45,10 +40,6 @@ def _norm(desc: str) -> str:
     d = re.sub(r"\b\d{5,}\b", " ", d)
     words = [w for w in d.split() if len(w) > 1]
     return " ".join(words[:3]).strip()
-
-
-def _is_transfer(desc: str) -> bool:
-    return bool(_TRANSFER_RE.search(desc))
 
 
 def _month_start(ym: str) -> date:
@@ -119,35 +110,6 @@ def _insight(
         "created_at": datetime.utcnow(),
         "meta_json": json.dumps(meta),
     }
-
-
-# ─── Data loading ─────────────────────────────────────────────────────────────
-
-def _load_txns(session: Session) -> list[dict]:
-    rows = session.exec(
-        select(Transaction)
-        .where(Transaction.is_duplicate == False)  # noqa: E712
-        .where(Transaction.is_ambiguous == False)   # noqa: E712
-        .order_by(Transaction.date)
-    ).all()
-    result = []
-    for t in rows:
-        try:
-            desc = decrypt(t.description)
-        except Exception:
-            desc = ""
-        result.append({
-            "id": t.id,
-            "date": t.date,
-            "month": t.date.strftime("%Y-%m"),
-            "description": desc,
-            "amount": t.amount,
-            "type": t.transaction_type,
-            "is_income_candidate": t.is_income_candidate,
-            "income_confirmed": t.income_confirmed,
-            "expense_category": t.expense_category or "other",
-        })
-    return result
 
 
 def _monthly_debit_buckets(txns: list[dict]) -> dict[str, list[dict]]:
