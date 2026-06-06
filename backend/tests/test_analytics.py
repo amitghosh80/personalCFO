@@ -138,3 +138,38 @@ def test_income_summary_prefers_confirmed_and_groups_by_category(make_txn):
     assert out["total_income"] == 3050.0
     by_cat = {c["category"]: c["amount"] for c in out["by_category"]}
     assert by_cat == {"salary": 3000.0, "interest": 50.0}
+
+
+def test_compare_periods_delta_and_pct(make_txn):
+    s = make_txn.__self_session__
+    make_txn(day="2026-04-10", amount=100.0, txn_type=TransactionType.debit,
+             description="SAFEWAY", expense_category="food_and_drink")
+    make_txn(day="2026-05-10", amount=150.0, txn_type=TransactionType.debit,
+             description="SAFEWAY", expense_category="food_and_drink")
+
+    out = analytics.compare_periods(
+        s, {"month": "2026-04"}, {"month": "2026-05"}, today=TODAY)
+    assert out["period_a"]["total"] == 100.0
+    assert out["period_b"]["total"] == 150.0
+    assert out["delta"] == 50.0
+    assert out["pct_change"] == 50.0
+
+
+def test_recurring_charges_detects_monthly_merchant(make_txn):
+    s = make_txn.__self_session__
+    for day in ("2026-03-15", "2026-04-15", "2026-05-15"):
+        make_txn(day=day, amount=15.99, txn_type=TransactionType.debit,
+                 description="NETFLIX SUBSCRIPTION", expense_category="subscriptions",
+                 expense_subcategory="streaming")
+    # A one-off should not be flagged.
+    make_txn(day="2026-05-02", amount=200.0, txn_type=TransactionType.debit,
+             description="RANDOM SHOP", expense_category="shopping")
+
+    out = analytics.recurring_charges(s, today=TODAY)
+    merchants = {r["merchant"]: r for r in out["recurring"]}
+    assert "NETFLIX SUBSCRIPTION" in merchants
+    netflix = merchants["NETFLIX SUBSCRIPTION"]
+    assert netflix["occurrences"] == 3
+    assert netflix["typical_amount"] == 15.99
+    assert netflix["cadence"] == "monthly"
+    assert "RANDOM SHOP" not in merchants

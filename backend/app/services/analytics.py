@@ -279,3 +279,85 @@ def income_summary(session: Session, period: dict | None = None, today: date | N
         "total_income": round(sum(t["amount"] for t in income_txns), 2),
         "by_category": categories,
     }
+
+
+def _spending_total(session: Session, period: dict | None, primary: str | None, today: date | None):
+    start, end, label = resolve_period(period, today)
+    txns = [t for t in load_ledger(session) if _in_range(t, start, end) and is_spending_txn(t)]
+    if primary:
+        txns = [t for t in txns if t["expense_category"] == primary]
+    return round(sum(t["amount"] for t in txns), 2), {"start": start.isoformat(), "end": end.isoformat(), "label": label}
+
+
+def compare_periods(
+    session: Session,
+    period_a: dict | None,
+    period_b: dict | None,
+    primary: str | None = None,
+    today: date | None = None,
+) -> dict:
+    """Compare spending between two periods. delta and pct_change are period_b
+    relative to period_a (positive = increase)."""
+    a_total, a_meta = _spending_total(session, period_a, primary, today)
+    b_total, b_meta = _spending_total(session, period_b, primary, today)
+    delta = round(b_total - a_total, 2)
+    pct = round((delta / a_total * 100), 2) if a_total else None
+    return {
+        "category": primary or "all",
+        "period_a": {**a_meta, "total": a_total},
+        "period_b": {**b_meta, "total": b_total},
+        "delta": delta,
+        "pct_change": pct,
+    }
+
+
+def detect_recurring(txns: list[dict]) -> list[dict]:
+    """Group debits by normalized merchant; flag those charged >=3 times at a
+    roughly monthly cadence with stable amounts."""
+    by_merchant: dict[str, list[dict]] = defaultdict(list)
+    for t in txns:
+        if t["type"] != TransactionType.debit or is_transfer(t["description"]):
+            continue
+        key = _norm(t["description"])
+        if key:
+            by_merchant[key].append(t)
+
+    results = []
+    for merchant, items in by_merchant.items():
+        if len(items) < 3:
+            continue
+        items = sorted(items, key=lambda x: x["date"])
+        amounts = [i["amount"] for i in items]
+        median = sorted(amounts)[len(amounts) // 2]
+        if median <= 0:
+            continue
+        # amounts must be stable (within 25% of median)
+        if any(abs(a - median) > 0.25 * median for a in amounts):
+            continue
+        gaps = [(items[i]["date"] - items[i - 1]["date"]).days for i in range(1, len(items))]
+        avg_gap = sum(gaps) / len(gaps)
+        if not (20 <= avg_gap <= 40):  # roughly monthly
+            continue
+        cats = [i["expense_category"] for i in items]
+        category = max(set(cats), key=cats.count)
+        results.append({
+            "merchant": merchant,
+            "cadence": "monthly" if 26 <= avg_gap <= 35 else f"~{round(avg_gap)}d",
+            "typical_amount": round(median, 2),
+            "occurrences": len(items),
+            "last_seen": items[-1]["date"].isoformat(),
+            "category": category,
+            "display": primary_display(category),
+        })
+    results.sort(key=lambda r: r["typical_amount"], reverse=True)
+    return results
+
+
+def recurring_charges(session: Session, primary: str | None = None, today: date | None = None) -> dict:
+    """Detected recurring charges across the full ledger (today unused; kept for
+    a uniform tool signature)."""
+    txns = load_ledger(session)
+    recurring = detect_recurring(txns)
+    if primary:
+        recurring = [r for r in recurring if r["category"] == primary]
+    return {"recurring": recurring}
