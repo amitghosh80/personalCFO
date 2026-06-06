@@ -199,3 +199,28 @@ def test_search_transactions_filters_and_caps(make_txn):
     assert out["returned"] == 2
     assert out["truncated"] is True
     assert out["limit"] == 2
+
+
+def test_tools_schema_shape():
+    names = {t["name"] for t in analytics.TOOLS}
+    assert names == {
+        "spending_by_category", "cashflow_summary", "income_summary",
+        "compare_periods", "recurring_charges", "search_transactions",
+    }
+    for t in analytics.TOOLS:
+        assert "description" in t and "input_schema" in t
+
+
+def test_dispatch_tool_routes_and_wraps_errors(make_txn):
+    s = make_txn.__self_session__
+    make_txn(day="2026-05-02", amount=100.0, txn_type=TransactionType.debit,
+             description="SAFEWAY", expense_category="food_and_drink")
+
+    ok = analytics.dispatch_tool(s, "spending_by_category", {"period": {"month": "2026-05"}}, today=TODAY)
+    assert ok["total_spending"] == 100.0
+
+    err = analytics.dispatch_tool(s, "spending_by_category", {"period": {"month": "garbage"}}, today=TODAY)
+    assert "error" in err
+
+    unknown = analytics.dispatch_tool(s, "no_such_tool", {}, today=TODAY)
+    assert "error" in unknown

@@ -409,3 +409,108 @@ def search_transactions(
         for t in txns[:limit]
     ]
     return {"transactions": rows, "returned": len(rows), "truncated": truncated, "limit": limit}
+
+
+# ─── Anthropic tool schemas + dispatcher ──────────────────────────────────────
+
+_PERIOD_SCHEMA = {
+    "type": "object",
+    "description": "A time period. Use exactly one style.",
+    "properties": {
+        "preset": {"type": "string", "enum": [
+            "this_month", "last_month", "this_quarter", "last_quarter",
+            "this_year", "last_year", "last_3_months", "last_6_months",
+            "last_12_months", "all_time",
+        ]},
+        "month": {"type": "string", "description": "YYYY-MM"},
+        "quarter": {"type": "string", "description": "YYYY-Qn, e.g. 2026-Q1"},
+        "year": {"type": "string", "description": "YYYY"},
+        "start": {"type": "string", "description": "YYYY-MM-DD (use with end)"},
+        "end": {"type": "string", "description": "YYYY-MM-DD (use with start)"},
+    },
+}
+
+TOOLS = [
+    {
+        "name": "spending_by_category",
+        "description": "Total spending in a period, broken down by category and subcategory. Excludes transfers, credit-card payments, and investments.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "period": _PERIOD_SCHEMA,
+                "primary": {"type": "string", "description": "Optional primary category key to filter to (e.g. food_and_drink)."},
+            },
+        },
+    },
+    {
+        "name": "cashflow_summary",
+        "description": "Money in vs out for a period: total credits, total debits, net, confirmed income, and a per-month breakdown.",
+        "input_schema": {"type": "object", "properties": {"period": _PERIOD_SCHEMA}},
+    },
+    {
+        "name": "income_summary",
+        "description": "Income for a period broken down by income category (salary, interest, rental, gig, other). Prefers confirmed income.",
+        "input_schema": {"type": "object", "properties": {"period": _PERIOD_SCHEMA}},
+    },
+    {
+        "name": "compare_periods",
+        "description": "Compare spending between two periods; returns each total plus delta and percent change (period_b relative to period_a).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "period_a": _PERIOD_SCHEMA,
+                "period_b": _PERIOD_SCHEMA,
+                "primary": {"type": "string", "description": "Optional primary category to compare."},
+            },
+            "required": ["period_a", "period_b"],
+        },
+    },
+    {
+        "name": "recurring_charges",
+        "description": "Recurring charges detected across the full ledger (roughly monthly, stable amount, 3+ occurrences).",
+        "input_schema": {
+            "type": "object",
+            "properties": {"primary": {"type": "string", "description": "Optional primary category filter."}},
+        },
+    },
+    {
+        "name": "search_transactions",
+        "description": "List individual transactions matching filters. Use only when line-item detail is needed; results are capped at 100 rows.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "period": _PERIOD_SCHEMA,
+                "primary": {"type": "string"},
+                "subcategory": {"type": "string"},
+                "min_amount": {"type": "number"},
+                "max_amount": {"type": "number"},
+                "merchant_contains": {"type": "string"},
+                "txn_type": {"type": "string", "enum": ["debit", "credit"]},
+                "limit": {"type": "integer", "description": "Max rows (default 50, hard cap 100)."},
+            },
+        },
+    },
+]
+
+_DISPATCH = {
+    "spending_by_category": lambda s, a, today: spending_by_category(s, a.get("period"), a.get("primary"), today),
+    "cashflow_summary": lambda s, a, today: cashflow_summary(s, a.get("period"), today),
+    "income_summary": lambda s, a, today: income_summary(s, a.get("period"), today),
+    "compare_periods": lambda s, a, today: compare_periods(s, a.get("period_a"), a.get("period_b"), a.get("primary"), today),
+    "recurring_charges": lambda s, a, today: recurring_charges(s, a.get("primary"), today),
+    "search_transactions": lambda s, a, today: search_transactions(
+        s, a.get("period"), a.get("primary"), a.get("subcategory"),
+        a.get("min_amount"), a.get("max_amount"), a.get("merchant_contains"),
+        a.get("txn_type"), a.get("limit", 50), today),
+}
+
+
+def dispatch_tool(session: Session, name: str, tool_input: dict, today: date | None = None) -> dict:
+    """Run a named tool, returning its result dict or {'error': ...} on failure."""
+    fn = _DISPATCH.get(name)
+    if fn is None:
+        return {"error": f"Unknown tool: {name}"}
+    try:
+        return fn(session, tool_input or {}, today)
+    except Exception as e:  # surfaced to the model, never crashes the loop
+        return {"error": f"{type(e).__name__}: {e}"}
