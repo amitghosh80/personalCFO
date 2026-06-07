@@ -135,3 +135,20 @@ export interface ImportSummary {
   ambiguous_count: number;
   date_range: { from: string | null; to: string | null };
 }
+
+export type ChatRole = "user" | "assistant";
+
+export interface ChatMessage {
+  role: ChatRole;
+  content: string;
+}
+
+export interface ChatToolUse {
+  name: string;
+  input: Record<string, unknown>;
+}
+
+export interface ChatResponse {
+  answer: string;
+  tools_used: ChatToolUse[];
+}

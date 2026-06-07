@@ -1,4 +1,4 @@
-import type { FileResult, ImportSummary, InsightFeedResponse, Transaction, UploadResult } from "./types";
+import type { ChatMessage, ChatResponse, FileResult, ImportSummary, InsightFeedResponse, Transaction, UploadResult } from "./types";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -74,4 +74,16 @@ export async function getTransactions(jobId?: string): Promise<Transaction[]> {
     : `${API}/api/transactions`;
   const res = await fetch(url);
   return handleResponse<Transaction[]>(res);
+}
+
+export async function sendChatMessage(
+  question: string,
+  history: ChatMessage[]
+): Promise<ChatResponse> {
+  const res = await fetch(`${API}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, history }),
+  });
+  return handleResponse<ChatResponse>(res);
 }
