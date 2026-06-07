@@ -65,3 +65,13 @@ def test_loop_respects_iteration_cap(make_txn):
 
     assert len(client.calls) == 3  # capped
     assert out["answer"]  # returns a graceful message, not an exception
+
+
+def test_system_prompt_includes_todays_date(make_txn):
+    s = make_txn.__self_session__
+    client = FakeClient([
+        SimpleNamespace(stop_reason="end_turn", content=[_text_block("hi")]),
+    ])
+    chat_service.answer_question(s, "hello", [], client=client, model="m", today=TODAY)
+    system_arg = client.calls[0]["system"]
+    assert "2026-06-06" in system_arg

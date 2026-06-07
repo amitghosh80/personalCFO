@@ -58,6 +58,8 @@ def answer_question(
     """
     client = client or _build_client()
     model = model or get_settings().chat_model
+    effective_today = today or date.today()
+    system = f"Today's date is {effective_today.isoformat()}.\n\n{SYSTEM_PROMPT}"
 
     messages = list(history or []) + [{"role": "user", "content": question}]
     tools_used: list[dict] = []
@@ -67,7 +69,7 @@ def answer_question(
         resp = client.messages.create(
             model=model,
             max_tokens=_MAX_TOKENS,
-            system=SYSTEM_PROMPT,
+            system=system,
             tools=TOOLS,
             messages=messages,
         )
@@ -97,7 +99,7 @@ def answer_question(
         tool_results = []
         for tu in tool_uses:
             tools_used.append({"name": tu.name, "input": tu.input})
-            result = dispatch_tool(session, tu.name, tu.input, today=today)
+            result = dispatch_tool(session, tu.name, tu.input, today=effective_today)
             tool_results.append({
                 "type": "tool_result",
                 "tool_use_id": tu.id,
