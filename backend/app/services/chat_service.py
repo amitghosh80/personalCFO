@@ -30,7 +30,7 @@ caveat (e.g. "based on auto-categorization").
 - Give descriptive analysis only. Do not give financial, tax, or legal advice.
 Be concise and use plain dollar figures."""
 
-_MAX_TOKENS = 1024
+_MAX_TOKENS = 2048
 
 
 def _build_client():
@@ -86,7 +86,8 @@ def answer_question(
                 })
                 tool_uses.append(block)
 
-        messages.append({"role": "assistant", "content": assistant_content})
+        if assistant_content:
+            messages.append({"role": "assistant", "content": assistant_content})
         if text_parts:
             last_text = "\n".join(text_parts).strip()
 

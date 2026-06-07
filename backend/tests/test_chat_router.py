@@ -40,3 +40,17 @@ def test_chat_endpoint_503_when_key_missing(session, monkeypatch):
         assert res.status_code == 503
     finally:
         app.dependency_overrides.clear()
+
+
+def test_chat_endpoint_502_on_upstream_error(session, monkeypatch):
+    def boom(*a, **k):
+        raise ValueError("model exploded")
+
+    monkeypatch.setattr(chat_router, "answer_question", boom)
+    app.dependency_overrides[get_session] = _override_session(session)
+    try:
+        client = TestClient(app)
+        res = client.post("/api/chat", json={"question": "hi", "history": []})
+        assert res.status_code == 502
+    finally:
+        app.dependency_overrides.clear()
