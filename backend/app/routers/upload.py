@@ -2,10 +2,10 @@ import hashlib
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, Depends
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile, Depends
 from sqlmodel import Session
 
-from ..database import get_session
+from ..database import get_session, get_engine
 from ..models.import_job import ImportJob, ImportStatus
 from ..models.transaction import Transaction, TransactionType
 from ..parsers.csv_parser import parse_csv
@@ -14,6 +14,7 @@ from ..services.duplicate_detector import is_duplicate
 from ..services.encryption import encrypt
 from ..services.expense_categorizer import categorize_expense
 from ..services.income_classifier import classify_income
+from ..services.transfer_detector import detect_and_mark
 from ..config import get_settings
 
 router = APIRouter(prefix="/api", tags=["upload"])
@@ -30,8 +31,22 @@ def _date_range(transactions: list[dict]) -> dict:
     return {"from": str(min(dates)), "to": str(max(dates))}
 
 
+def _run_ai_categorization(job_id: str) -> None:
+    """Background worker: AI-categorize a job's fallback rows in a fresh session.
+
+    Runs after the upload response is returned so income review (F2) is available
+    immediately; categories are ready by the time the user finishes review."""
+    from ..services.ai_categorizer import categorize_job
+    with Session(get_engine()) as session:
+        try:
+            categorize_job(session, job_id)
+        except Exception:
+            pass  # never crash the worker; rows stay in the uncategorized queue
+
+
 @router.post("/upload")
 async def upload_statements(
+    background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
     session: Session = Depends(get_session),
 ):
@@ -90,8 +105,11 @@ async def upload_statements(
 
             if txn_data["transaction_type"] == TransactionType.debit:
                 exp_primary, exp_sub, exp_source = categorize_expense(txn_data["description"])
+                # Rule hits are high-confidence; fallbacks await the AI pass.
+                exp_conf, exp_label = (1.0, "high") if exp_source == "rule" else (None, "low")
             else:
                 exp_primary, exp_sub, exp_source = None, None, None
+                exp_conf, exp_label = None, None
 
             txn = Transaction(
                 import_job_id=job_id,
@@ -107,6 +125,8 @@ async def upload_statements(
                 expense_category=exp_primary,
                 expense_subcategory=exp_sub,
                 category_source=exp_source,
+                category_confidence=exp_conf,
+                confidence_label=exp_label,
                 is_duplicate=is_dup,
             )
             session.add(txn)
@@ -133,16 +153,25 @@ async def upload_statements(
         })
         total_saved += len(saved_txns)
 
+    # Cross-account transfer pairing runs once over the whole job, after every
+    # file is persisted, so transfers between two imported accounts are matched.
+    transfer_summary = detect_and_mark(session, job_id)
+
     job.total_transactions = total_saved
     job.status = ImportStatus.pending_income_review
     job.completed_at = datetime.utcnow()
     session.add(job)
     session.commit()
 
+    # AI categorization of the long tail runs after the response is sent.
+    background_tasks.add_task(_run_ai_categorization, job_id)
+
     return {
         "import_job_id": job_id,
         "file_results": file_results,
         "total_transactions": total_saved,
+        "transfers_paired": transfer_summary["paired"],
+        "transfers_unconfirmed": transfer_summary["unconfirmed"],
         "status": job.status,
     }
 

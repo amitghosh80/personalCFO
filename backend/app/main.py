@@ -2,10 +2,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import create_db_and_tables, get_engine
-from .models import Insight  # noqa: F401 — ensures table is registered before create_all
+from .models import Insight  # noqa: F401 — ensures tables are registered before create_all
 from .routers import upload, transactions
 from .routers import insights
 from .routers import chat
+from .routers import categories
 
 
 def _migrate():
@@ -14,13 +15,22 @@ def _migrate():
     from .config import get_settings
     db_url = get_settings().database_url  # e.g. "sqlite:///./personalcfo.db"
     db_path = db_url.replace("sqlite:///", "") or "personalcfo.db"
-    try:
-        raw = _sqlite3.connect(db_path)
-        raw.execute("ALTER TABLE \"transaction\" ADD COLUMN expense_category TEXT")
-        raw.commit()
-        raw.close()
-    except _sqlite3.OperationalError:
-        pass  # column already exists — safe to ignore
+    new_columns = [
+        ("expense_category", "TEXT"),
+        ("is_transfer", "BOOLEAN DEFAULT 0"),
+        ("transfer_status", "TEXT"),
+        ("transfer_pair_id", "INTEGER"),
+        ("category_confidence", "REAL"),
+        ("confidence_label", "TEXT"),
+    ]
+    raw = _sqlite3.connect(db_path)
+    for col, decl in new_columns:
+        try:
+            raw.execute(f'ALTER TABLE "transaction" ADD COLUMN {col} {decl}')
+        except _sqlite3.OperationalError:
+            pass  # column already exists — safe to ignore
+    raw.commit()
+    raw.close()
 
 
 def _backfill_expense_categories():
@@ -76,3 +86,4 @@ app.include_router(upload.router)
 app.include_router(transactions.router)
 app.include_router(insights.router)
 app.include_router(chat.router)
+app.include_router(categories.router)

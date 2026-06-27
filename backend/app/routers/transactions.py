@@ -33,6 +33,12 @@ def _serialize(t: Transaction) -> dict:
         "income_category": t.income_category,
         "income_confirmed": t.income_confirmed,
         "expense_category": t.expense_category,
+        "expense_subcategory": t.expense_subcategory,
+        "category_source": t.category_source,
+        "category_confidence": t.category_confidence,
+        "confidence_label": t.confidence_label,
+        "is_transfer": t.is_transfer,
+        "transfer_status": t.transfer_status,
         "is_ambiguous": t.is_ambiguous,
         "is_duplicate": t.is_duplicate,
     }
@@ -119,8 +125,13 @@ def get_import_summary(job_id: str, session: Session = Depends(get_session)):
     for t in txns:
         key = t.date.strftime("%Y-%m")
         if t.transaction_type == TransactionType.debit:
-            buckets[key]["expenses"] += t.amount
             cat = t.expense_category or "other"
+            # Skip money movement (credit-card payments, transfers, investments):
+            # counting a CC payment as an expense double-counts the card's own
+            # imported purchases. Mirrors the analytics layer's spending filter.
+            if not is_spending(cat):
+                continue
+            buckets[key]["expenses"] += t.amount
             cat_buckets[key][cat] += t.amount
         elif t.transaction_type == TransactionType.credit:
             # Confirmed income, or auto-detected candidate not yet reviewed
@@ -165,6 +176,15 @@ def get_import_summary(job_id: str, session: Session = Depends(get_session)):
             "to": str(max(t.date for t in txns)) if txns else None,
         },
     }
+
+
+@router.get("/import/{job_id}/observations")
+def get_proactive_observations(job_id: str, session: Session = Depends(get_session)):
+    """The PRD F4 post-import observations (2–3 grounded notes) for the chat
+    window. Each observation cites a real number from the user's data."""
+    from ..services.insight_engine import proactive_observations
+    _require_job(session, job_id)
+    return {"observations": proactive_observations(session, job_id)}
 
 
 def _require_job(session: Session, job_id: str) -> ImportJob:
