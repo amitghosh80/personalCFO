@@ -188,7 +188,7 @@ _RULES: list[tuple[str, str, list[str]]] = [
     ("credit_card_payment", "credit_card_payment", [
         r"payment\s+to\s+.*\bcard\b", r"\bcard\b.*\bpayment\b",
         r"amex\s*epayment", r"american\s*express\s*ach\s*pmt",
-        r"chase\s*credit\s*crd", r"citi\s*(card|autopay)", r"capital\s*one.*(pymt|payment|crd)",
+        r"chase\s*credit\s*crd", r"citi\s*(card|autopay)", r"capital\s*one.*(pymt|pmt|payment|crd)",
         r"discover.*\b(e[- ]?pymt|payment)\b", r"\bcardmember\s*serv",
         r"\bautopay\b.*\bcard\b", r"bill\s*pay.*\bcard\s*ending",
         r"card\s*ending\s*in\s*\d+",
