@@ -28,10 +28,18 @@ export default function FileUploader() {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: { "text/csv": [".csv"], "application/pdf": [".pdf"] },
-    maxSize: 10 * 1024 * 1024,
+    maxSize: 20 * 1024 * 1024,
     onDropRejected: (rejected) => {
-      const reasons = rejected.map((r) => r.errors.map((e) => e.message).join(", ")).join("; ");
-      setError(`Some files were rejected: ${reasons}`);
+      const reasons = rejected
+        .map((r) => `${r.file.name}: ${r.errors.map((e) =>
+          e.code === "file-too-large"
+            ? "exceeds 20MB — try exporting a shorter date range"
+            : e.code === "file-invalid-type"
+            ? "only PDF and CSV files are supported"
+            : e.message
+        ).join(", ")}`)
+        .join("; ");
+      setError(reasons);
     },
   });
 
@@ -44,7 +52,13 @@ export default function FileUploader() {
     setError(null);
     try {
       const result = await uploadStatements(files.map((f) => f.file));
-      router.push(`/import/${result.import_job_id}/income`);
+      // Stash the per-file results so the scan's completion screen can show them.
+      try {
+        sessionStorage.setItem(`upload:${result.import_job_id}`, JSON.stringify(result));
+      } catch {
+        /* sessionStorage unavailable — scan still works, just no per-file summary */
+      }
+      router.push(`/import/${result.import_job_id}/scan`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed. Please try again.");
       setUploading(false);
@@ -66,7 +80,7 @@ export default function FileUploader() {
         <p className="text-gray-700 font-medium">
           {isDragActive ? "Drop your files here" : "Drag & drop statements here"}
         </p>
-        <p className="text-sm text-gray-400 mt-1">CSV or PDF · up to 10 MB each · multiple files supported</p>
+        <p className="text-sm text-gray-400 mt-1">CSV or PDF · up to 20 MB each · multiple files supported</p>
         <button
           type="button"
           className="mt-4 px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors text-gray-700"

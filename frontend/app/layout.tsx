@@ -15,12 +15,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <a href="/" className="text-lg font-bold text-gray-900 tracking-tight">
               PersonalCFO
             </a>
-            <a
-              href="/transactions"
-              className="text-sm text-blue-600 hover:text-blue-800 transition-colors"
-            >
-              All Transactions
-            </a>
+            <div className="flex items-center gap-5">
+              <a href="/transactions" className="text-sm text-blue-600 hover:text-blue-800 transition-colors">
+                Transactions
+              </a>
+              <a href="/uncategorized" className="text-sm text-blue-600 hover:text-blue-800 transition-colors">
+                Review Queue
+              </a>
+              <a href="/chat" className="text-sm text-blue-600 hover:text-blue-800 transition-colors">
+                Ask CFO
+              </a>
+            </div>
           </div>
         </nav>
         <main className="max-w-5xl mx-auto px-6 py-10">{children}</main>

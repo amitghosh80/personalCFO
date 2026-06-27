@@ -1,31 +1,49 @@
 "use client";
 
-import { useState } from "react";
-import { sendChatMessage } from "@/lib/api";
-import type { ChatMessage, ChatToolUse } from "@/lib/types";
+import { useEffect, useState } from "react";
+import { getObservations, getStarterQuestions, sendChatMessage } from "@/lib/api";
+import type { ChatMessage, ChatToolUse, DataCoverage, Observation } from "@/lib/types";
 
 interface DisplayMessage extends ChatMessage {
   tools?: ChatToolUse[];
 }
 
-export default function ChatInterface() {
+function coverageText(c: DataCoverage): string | null {
+  if (!c.date_range) return null;
+  const accounts = `${c.account_count} account${c.account_count === 1 ? "" : "s"}`;
+  return `Based on your ${c.date_range.from} – ${c.date_range.to} data from ${accounts}.`;
+}
+
+export default function ChatInterface({ jobId }: { jobId?: string }) {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [starters, setStarters] = useState<string[]>([]);
+  const [observations, setObservations] = useState<Observation[]>([]);
+  const [coverage, setCoverage] = useState<DataCoverage | null>(null);
 
-  async function send() {
-    const question = input.trim();
-    if (!question || loading) return;
+  useEffect(() => {
+    getStarterQuestions().then(setStarters).catch(() => {});
+    if (jobId) {
+      // PRD F4: 2–3 proactive observations appear automatically after an import.
+      getObservations(jobId).then(setObservations).catch(() => {});
+    }
+  }, [jobId]);
+
+  async function ask(question: string) {
+    const q = question.trim();
+    if (!q || loading) return;
     setError(null);
     setInput("");
 
     const history: ChatMessage[] = messages.map((m) => ({ role: m.role, content: m.content }));
-    setMessages((prev) => [...prev, { role: "user", content: question }]);
+    setMessages((prev) => [...prev, { role: "user", content: q }]);
     setLoading(true);
     try {
-      const res = await sendChatMessage(question, history);
+      const res = await sendChatMessage(q, history);
       setMessages((prev) => [...prev, { role: "assistant", content: res.answer, tools: res.tools_used }]);
+      if (res.coverage) setCoverage(res.coverage);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
@@ -33,14 +51,30 @@ export default function ChatInterface() {
     }
   }
 
+  const showStarters = !loading && starters.length > 0;
+
   return (
     <div className="flex flex-col h-[70vh]">
       <div className="flex-1 overflow-y-auto space-y-4 p-2">
-        {messages.length === 0 && (
+        {/* Proactive post-import briefing */}
+        {observations.length > 0 && messages.length === 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Since your last import</p>
+            {observations.map((o, i) => (
+              <div key={i} className="rounded-lg border border-gray-200 bg-white px-3 py-2">
+                <p className="text-sm font-medium text-gray-800">{o.title}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{o.text}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {messages.length === 0 && observations.length === 0 && (
           <p className="text-gray-400 text-sm text-center mt-8">
             Ask about your finances — e.g. &ldquo;How much did I spend on dining last quarter?&rdquo;
           </p>
         )}
+
         {messages.map((m, i) => (
           <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
             <div
@@ -60,6 +94,26 @@ export default function ChatInterface() {
         {loading && <div className="text-gray-400 text-sm">Thinking…</div>}
       </div>
 
+      {/* Coverage footer (PRD F4 scope disclosure) */}
+      {coverage && coverageText(coverage) && (
+        <div className="text-[11px] text-gray-400 px-2 pb-1">{coverageText(coverage)}</div>
+      )}
+
+      {/* Starter questions */}
+      {showStarters && (
+        <div className="flex flex-wrap gap-2 px-2 pb-2">
+          {starters.map((q) => (
+            <button
+              key={q}
+              onClick={() => ask(q)}
+              className="text-xs px-3 py-1.5 rounded-full border border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+      )}
+
       {error && <div className="text-red-600 text-sm px-2 py-1">{error}</div>}
 
       <div className="flex gap-2 border-t pt-3">
@@ -68,12 +122,12 @@ export default function ChatInterface() {
           placeholder="Ask a question about your money…"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && send()}
+          onKeyDown={(e) => e.key === "Enter" && ask(input)}
           disabled={loading}
         />
         <button
           className="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm disabled:opacity-50"
-          onClick={send}
+          onClick={() => ask(input)}
           disabled={loading || !input.trim()}
         >
           Send

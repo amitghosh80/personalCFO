@@ -1,4 +1,15 @@
-import type { ChatMessage, ChatResponse, FileResult, ImportSummary, InsightFeedResponse, Transaction, UploadResult } from "./types";
+import type {
+  ChatMessage,
+  ChatResponse,
+  ImportSummary,
+  MerchantRule,
+  Observation,
+  TaxonomyResponse,
+  Transaction,
+  UncategorizedAlert,
+  UncategorizedRow,
+  UploadResult,
+} from "./types";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -45,26 +56,64 @@ export async function getImportSummary(jobId: string): Promise<ImportSummary> {
   return handleResponse<ImportSummary>(res);
 }
 
-export async function generateInsights(jobId: string): Promise<{ job_id: string; insights_generated: number; insight_ids: number[] }> {
-  const res = await fetch(`${API}/api/import/${jobId}/generate-insights`, { method: "POST" });
+// ─── Categorization (F3) ──────────────────────────────────────────────────────
+
+export async function getTaxonomy(): Promise<TaxonomyResponse> {
+  const res = await fetch(`${API}/api/categories/taxonomy`);
+  return handleResponse<TaxonomyResponse>(res);
+}
+
+export async function updateCategory(
+  txnId: number,
+  primary: string,
+  subcategory: string,
+  createRule = false
+): Promise<{ updated: number; rule_created: boolean }> {
+  const res = await fetch(`${API}/api/categories/transaction/${txnId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ primary, subcategory, create_rule: createRule }),
+  });
   return handleResponse(res);
 }
 
-export async function getInsights(params?: {
-  severity?: string;
-  type?: string;
-  include_dismissed?: boolean;
-}): Promise<InsightFeedResponse> {
-  const url = new URL(`${API}/api/insights`);
-  if (params?.severity) url.searchParams.set("severity", params.severity);
-  if (params?.type) url.searchParams.set("type", params.type);
-  if (params?.include_dismissed) url.searchParams.set("include_dismissed", "true");
-  const res = await fetch(url.toString());
+export async function bulkUpdateCategory(
+  transactionIds: number[],
+  primary: string,
+  subcategory: string,
+  createRule = false
+): Promise<{ updated: number; rule_created: boolean }> {
+  const res = await fetch(`${API}/api/categories/bulk`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ transaction_ids: transactionIds, primary, subcategory, create_rule: createRule }),
+  });
   return handleResponse(res);
 }
 
-export async function dismissInsight(insightId: number): Promise<{ id: number; is_dismissed: boolean }> {
-  const res = await fetch(`${API}/api/insights/${insightId}/dismiss`, { method: "PATCH" });
+export async function getUncategorized(jobId?: string): Promise<UncategorizedRow[]> {
+  const url = jobId
+    ? `${API}/api/categories/uncategorized?import_job_id=${jobId}`
+    : `${API}/api/categories/uncategorized`;
+  const res = await fetch(url);
+  return handleResponse<UncategorizedRow[]>(res);
+}
+
+export async function getUncategorizedAlert(jobId?: string): Promise<UncategorizedAlert> {
+  const url = jobId
+    ? `${API}/api/categories/uncategorized/alert?import_job_id=${jobId}`
+    : `${API}/api/categories/uncategorized/alert`;
+  const res = await fetch(url);
+  return handleResponse<UncategorizedAlert>(res);
+}
+
+export async function listRules(): Promise<MerchantRule[]> {
+  const res = await fetch(`${API}/api/categories/rules`);
+  return handleResponse<MerchantRule[]>(res);
+}
+
+export async function deleteRule(ruleId: number): Promise<{ deleted: number }> {
+  const res = await fetch(`${API}/api/categories/rules/${ruleId}`, { method: "DELETE" });
   return handleResponse(res);
 }
 
@@ -86,4 +135,16 @@ export async function sendChatMessage(
     body: JSON.stringify({ question, history }),
   });
   return handleResponse<ChatResponse>(res);
+}
+
+export async function getStarterQuestions(): Promise<string[]> {
+  const res = await fetch(`${API}/api/chat/starters`);
+  const body = await handleResponse<{ questions: string[] }>(res);
+  return body.questions;
+}
+
+export async function getObservations(jobId: string): Promise<Observation[]> {
+  const res = await fetch(`${API}/api/import/${jobId}/observations`);
+  const body = await handleResponse<{ observations: Observation[] }>(res);
+  return body.observations;
 }

@@ -6,16 +6,18 @@ import { confirmIncome, getIncomeReview } from "@/lib/api";
 import { exportToExcel } from "@/lib/export";
 import type { IncomeCategory, Transaction } from "@/lib/types";
 
-const CATEGORY_LABELS: Record<IncomeCategory | "other", string> = {
+const CATEGORY_LABELS: Record<IncomeCategory, string> = {
   salary: "Salary / Payroll",
+  freelance: "Freelance / Contract",
   interest: "Interest / Dividend",
   rental: "Rental Income",
-  gig: "Gig / Freelance",
+  gig: "Gig / Platform",
   other: "Other Income",
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
   salary: "bg-green-100 text-green-800",
+  freelance: "bg-teal-100 text-teal-800",
   interest: "bg-blue-100 text-blue-800",
   rental: "bg-purple-100 text-purple-800",
   gig: "bg-orange-100 text-orange-800",
@@ -126,16 +128,57 @@ export default function IncomeReview({ jobId }: { jobId: string }) {
   const candidates = credits.filter((t) => t.is_income_candidate);
   const otherCredits = credits.filter((t) => !t.is_income_candidate);
 
+  const reviewedCount = credits.filter(
+    (t) => rowState[t.id]?.confirmed || rowState[t.id]?.isDirty
+  ).length;
+  const salaryCandidates = candidates.filter(
+    (t) => (rowState[t.id]?.category ?? t.income_category) === "salary"
+  );
+  const confirmedRows = credits.filter((t) => rowState[t.id]?.confirmed);
+  const totalsByType: Record<string, number> = {};
+  confirmedRows.forEach((t) => {
+    const cat = rowState[t.id]?.category ?? "other";
+    totalsByType[cat] = (totalsByType[cat] ?? 0) + t.amount;
+  });
+  const grandTotal = confirmedRows.reduce((s, t) => s + t.amount, 0);
+
+  const confirmAllSalary = () => {
+    setRowState((prev) => {
+      const next = { ...prev };
+      salaryCandidates.forEach((t) => {
+        next[t.id] = { confirmed: true, category: "salary", isDirty: true };
+      });
+      return next;
+    });
+  };
+
+  const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">Review Income</h2>
+        <h2 className="text-2xl font-bold text-gray-900">Review your income</h2>
         <p className="text-gray-500 mt-1">
-          We detected {candidates.length} likely income transaction
-          {candidates.length !== 1 ? "s" : ""}. Confirm what counts as income —
-          this helps us build your accurate financial picture.
+          We found {candidates.length} potential income transaction
+          {candidates.length !== 1 ? "s" : ""}. Confirm or correct each one.
         </p>
+        {credits.length > 0 && (
+          <p className="text-xs text-gray-400 mt-2">{reviewedCount} of {credits.length} reviewed</p>
+        )}
       </div>
+
+      {confirmedRows.length > 0 && (
+        <div className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm">
+          {Object.entries(totalsByType)
+            .sort((a, b) => b[1] - a[1])
+            .map(([cat, amt]) => (
+              <span key={cat} className="text-green-800">
+                {CATEGORY_LABELS[cat as IncomeCategory] ?? cat}: <span className="font-semibold">{money(amt)}</span>
+              </span>
+            ))}
+          <span className="text-green-900 font-bold">Total: {money(grandTotal)}</span>
+        </div>
+      )}
 
       {error && (
         <p className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
@@ -150,14 +193,24 @@ export default function IncomeReview({ jobId }: { jobId: string }) {
       ) : (
         <div className="space-y-6">
           {candidates.length > 0 && (
-            <Section
-              title="Likely Income"
-              subtitle="Auto-detected — deselect anything that isn't actually income"
-              transactions={candidates}
-              rowState={rowState}
-              onToggle={toggle}
-              onCategory={setCategory}
-            />
+            <div>
+              {salaryCandidates.length >= 3 && (
+                <button
+                  onClick={confirmAllSalary}
+                  className="mb-3 text-sm px-3 py-1.5 rounded-lg border border-green-300 text-green-700 hover:bg-green-50 transition-colors"
+                >
+                  ✓ Confirm all salary/payroll ({salaryCandidates.length})
+                </button>
+              )}
+              <Section
+                title="Likely Income"
+                subtitle="Auto-detected — deselect anything that isn't actually income"
+                transactions={candidates}
+                rowState={rowState}
+                onToggle={toggle}
+                onCategory={setCategory}
+              />
+            </div>
           )}
           {otherCredits.length > 0 && (
             <Section

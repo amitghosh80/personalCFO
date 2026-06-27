@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { generateInsights, getImportSummary } from "@/lib/api";
+import { getImportSummary } from "@/lib/api";
 import type { ImportSummary as ImportSummaryType, MonthlyRow } from "@/lib/types";
 
 // Keys mirror backend TAXONOMY primaries in expense_categorizer.py.
@@ -106,8 +106,6 @@ export default function ImportSummary({ jobId }: { jobId: string }) {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-    // Trigger insight generation in the background; ignore errors
-    generateInsights(jobId).catch(() => {});
   }, [jobId]);
 
   if (loading) return <div className="text-gray-500">Loading summary…</div>;
@@ -230,10 +228,10 @@ export default function ImportSummary({ jobId }: { jobId: string }) {
           View Transactions
         </button>
         <button
-          onClick={() => router.push("/insights")}
+          onClick={() => router.push(`/chat?job=${jobId}`)}
           className="px-5 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
         >
-          View Insights
+          Ask CFO
         </button>
         <button
           onClick={() => router.push("/")}

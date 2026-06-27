@@ -1,6 +1,8 @@
 export type TransactionType = "debit" | "credit";
 
-export type IncomeCategory = "salary" | "interest" | "rental" | "gig" | "other";
+export type IncomeCategory = "salary" | "freelance" | "interest" | "rental" | "gig" | "other";
+
+export type ConfidenceLabel = "low" | "medium" | "high";
 
 export interface Transaction {
   id: number;
@@ -16,6 +18,12 @@ export interface Transaction {
   income_category: IncomeCategory | null;
   income_confirmed: boolean | null;
   expense_category: ExpenseCategory | null;
+  expense_subcategory: string | null;
+  category_source: "rule" | "ai" | "user" | "fallback" | null;
+  category_confidence: number | null;
+  confidence_label: ConfidenceLabel | null;
+  is_transfer: boolean;
+  transfer_status: "paired" | "unconfirmed" | null;
   is_ambiguous: boolean;
   is_duplicate: boolean;
 }
@@ -40,6 +48,8 @@ export interface UploadResult {
   import_job_id: string;
   file_results: FileResult[];
   total_transactions: number;
+  transfers_paired: number;
+  transfers_unconfirmed: number;
   status: string;
 }
 
@@ -82,47 +92,52 @@ export type ExpenseCategory =
   | "transfer"
   | "investment";
 
-export type InsightType =
-  | "spending_increase"
-  | "spending_decrease"
-  | "income_change"
-  | "recurring_charge"
-  | "duplicate_charge"
-  | "large_expense"
-  | "merchant_spike"
-  | "cashflow_risk"
-  | "transfer_detected"
-  | "subscription_creep"
-  | "top_spending_category"
-  | "category_spike";
+// ─── Categorization (F3) ──────────────────────────────────────────────────────
 
-export type Severity = "low" | "medium" | "high";
-export type ConfidenceLabel = "low" | "medium" | "high";
-
-export interface Insight {
-  id: number;
-  import_job_id: string;
-  insight_type: InsightType;
-  title: string;
-  explanation: string;
-  severity: Severity;
-  confidence: number;
-  confidence_label: ConfidenceLabel;
-  time_period_start: string | null;
-  time_period_end: string | null;
-  supporting_transaction_ids: number[];
-  suggested_next_step: string;
-  is_dismissed: boolean;
-  created_at: string;
-  metadata: Record<string, unknown>;
+export interface TaxonomySub {
+  key: string;
+  display: string;
 }
 
-export interface InsightFeedResponse {
-  insights: Insight[];
-  total: number;
-  high_severity_count: number;
-  medium_severity_count: number;
-  low_severity_count: number;
+export interface TaxonomyPrimary {
+  key: string;
+  display: string;
+  is_spending: boolean;
+  subcategories: TaxonomySub[];
+}
+
+export interface TaxonomyResponse {
+  primaries: TaxonomyPrimary[];
+}
+
+export interface UncategorizedRow {
+  id: number;
+  date: string;
+  description: string;
+  amount: number;
+  expense_category: string | null;
+  confidence_label: ConfidenceLabel | null;
+}
+
+export interface UncategorizedAlert {
+  over_threshold: boolean;
+  uncategorized_count: number;
+  uncategorized_amount: number;
+  total_count: number;
+  total_spend: number;
+  pct_count: number;
+  pct_spend: number;
+  message: string | null;
+}
+
+export interface MerchantRule {
+  id: number;
+  merchant_pattern: string;
+  primary: string;
+  subcategory: string;
+  display: string;
+  created_at: string;
+  match_count: number;
 }
 
 export interface ImportSummary {
@@ -148,7 +163,21 @@ export interface ChatToolUse {
   input: Record<string, unknown>;
 }
 
+export interface DataCoverage {
+  date_range: { from: string; to: string } | null;
+  account_count: number;
+  institutions: string[];
+  transaction_count: number;
+}
+
 export interface ChatResponse {
   answer: string;
   tools_used: ChatToolUse[];
+  coverage?: DataCoverage;
+}
+
+export interface Observation {
+  kind: "summary" | "spending" | "anomaly";
+  title: string;
+  text: string;
 }

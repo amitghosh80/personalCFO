@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getTransactions } from "@/lib/api";
-import type { Transaction } from "@/lib/types";
+import { getTaxonomy, getTransactions, updateCategory } from "@/lib/api";
+import type { TaxonomyPrimary, Transaction } from "@/lib/types";
+import CategoryPicker from "./CategoryPicker";
 
 const INCOME_LABELS: Record<string, string> = {
   salary: "Salary",
+  freelance: "Freelance",
   interest: "Interest",
   rental: "Rental",
   gig: "Gig",
@@ -78,13 +80,28 @@ export default function TransactionTable({ jobId }: { jobId?: string }) {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "debit" | "credit">("all");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
+  const [taxonomy, setTaxonomy] = useState<TaxonomyPrimary[]>([]);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   useEffect(() => {
     getTransactions(jobId)
       .then(setTransactions)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+    getTaxonomy().then((t) => setTaxonomy(t.primaries)).catch(() => {});
   }, [jobId]);
+
+  async function saveCategory(t: Transaction, primary: string, sub: string, createRule: boolean) {
+    await updateCategory(t.id, primary, sub, createRule);
+    setTransactions((prev) =>
+      prev.map((x) =>
+        x.id === t.id
+          ? { ...x, expense_category: primary as Transaction["expense_category"], expense_subcategory: sub, category_source: "user", confidence_label: "high" }
+          : x
+      )
+    );
+    setEditingId(null);
+  }
 
   const filtered = useMemo(() => {
     let rows = transactions;
@@ -172,29 +189,54 @@ export default function TransactionTable({ jobId }: { jobId?: string }) {
                     {t.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex gap-1 flex-wrap">
-                      {t.transaction_type === "debit" && t.expense_category && t.expense_category !== "other" && (
-                        <Badge
-                          label={EXPENSE_LABELS[t.expense_category] ?? t.expense_category}
-                          color={EXPENSE_COLORS[t.expense_category] ?? "bg-gray-100 text-gray-500"}
-                        />
-                      )}
-                      {t.income_confirmed === true && t.income_category && (
-                        <Badge
-                          label={INCOME_LABELS[t.income_category] ?? t.income_category}
-                          color="bg-green-100 text-green-800"
-                        />
-                      )}
-                      {t.is_income_candidate && t.income_confirmed === null && (
-                        <Badge label="Unreviewed" color="bg-amber-100 text-amber-700" />
-                      )}
-                      {t.is_duplicate && (
-                        <Badge label="Duplicate?" color="bg-orange-100 text-orange-700" />
-                      )}
-                      {t.is_ambiguous && (
-                        <Badge label="Ambiguous" color="bg-gray-100 text-gray-600" />
-                      )}
-                    </div>
+                    {editingId === t.id ? (
+                      <CategoryPicker
+                        primaries={taxonomy}
+                        initialPrimary={t.expense_category}
+                        initialSub={t.expense_subcategory}
+                        onSave={(p, s, rule) => saveCategory(t, p, s, rule)}
+                        onCancel={() => setEditingId(null)}
+                      />
+                    ) : (
+                      <div className="flex gap-1 flex-wrap items-center">
+                        {t.transaction_type === "debit" && t.expense_category && t.expense_category !== "other" && (
+                          <Badge
+                            label={EXPENSE_LABELS[t.expense_category] ?? t.expense_category}
+                            color={EXPENSE_COLORS[t.expense_category] ?? "bg-gray-100 text-gray-500"}
+                          />
+                        )}
+                        {t.transaction_type === "debit" && t.confidence_label === "low" && (
+                          <Badge label="Review?" color="bg-amber-100 text-amber-700" />
+                        )}
+                        {t.income_confirmed === true && t.income_category && (
+                          <Badge
+                            label={INCOME_LABELS[t.income_category] ?? t.income_category}
+                            color="bg-green-100 text-green-800"
+                          />
+                        )}
+                        {t.is_income_candidate && t.income_confirmed === null && (
+                          <Badge label="Unreviewed" color="bg-amber-100 text-amber-700" />
+                        )}
+                        {t.transfer_status === "unconfirmed" && (
+                          <Badge label="Likely transfer?" color="bg-blue-50 text-blue-700" />
+                        )}
+                        {t.is_duplicate && (
+                          <Badge label="Duplicate?" color="bg-orange-100 text-orange-700" />
+                        )}
+                        {t.is_ambiguous && (
+                          <Badge label="Ambiguous" color="bg-gray-100 text-gray-600" />
+                        )}
+                        {t.transaction_type === "debit" && (
+                          <button
+                            onClick={() => setEditingId(t.id)}
+                            className="text-xs text-gray-400 hover:text-blue-600"
+                            title="Edit category"
+                          >
+                            ✎
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
