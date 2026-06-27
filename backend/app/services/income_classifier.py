@@ -96,12 +96,27 @@ _RENTAL = [
     r"vrbo",
 ]
 
+# Freelance / contract income — explicit contract signals only. Personal P2P
+# rails (PayPal, Venmo, Zelle) deliberately stay under _GIG: in the user-reviewed
+# ground truth those deposits were classified as gig, and the description alone
+# can't distinguish a business client from a personal payment.
+_FREELANCE = [
+    r"\bstripe\b",
+    r"\bfreelance\b",
+    r"\bconsult(ing|ant)\b",
+    r"\bcontractor\b",
+    r"contract\s*(pay|pmt|payment)",
+    r"\binvoice\b",
+    r"\b1099\b",
+]
+
 _GIG = [
     r"\bpaypal\b",
     r"\bvenmo\b",
-    r"\bstripe\b",
     r"\bsquare\b",
     r"\bdoordash\b",
+    r"\bgrubhub\b",
+    r"\binstacart\b",
     r"\buber\b",
     r"\blyft\b",
     r"\bupwork\b",
@@ -110,13 +125,11 @@ _GIG = [
     r"\bshopify\b",
     r"amazon marketplace",
     r"amazon seller",
-    r"freelance",
-    r"consulting fee",
-    r"contractor pay",
 ]
 
-# Threshold: large unexplained credits are flagged for user review
-_LARGE_CREDIT_THRESHOLD = 500.0
+# Threshold: large unexplained credits are flagged for user review.
+# PRD F2 / Open Question Q3 default for "Other Income".
+_LARGE_CREDIT_THRESHOLD = 200.0
 
 
 def _matches_any(desc: str, patterns: list[str]) -> bool:
@@ -144,6 +157,9 @@ def classify_income(
 
     if _matches_any(description, _SALARY):
         return True, IncomeCategory.salary
+
+    if _matches_any(description, _FREELANCE):
+        return True, IncomeCategory.freelance
 
     if _matches_any(description, _INTEREST):
         return True, IncomeCategory.interest

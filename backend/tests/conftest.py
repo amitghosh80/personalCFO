@@ -13,6 +13,7 @@ from cryptography.fernet import Fernet
 os.environ["ENCRYPTION_KEY"] = Fernet.generate_key().decode()
 
 from sqlmodel import SQLModel, Session, create_engine  # noqa: E402
+from sqlalchemy.pool import StaticPool  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.models.transaction import Transaction, TransactionType  # noqa: E402
 from app.services.encryption import encrypt  # noqa: E402
@@ -25,6 +26,8 @@ def session():
     engine = create_engine(
         "sqlite://",  # in-memory
         connect_args={"check_same_thread": False},
+        poolclass=StaticPool,  # one shared connection so TestClient worker
+                               # threads see the same in-memory DB/tables
     )
     SQLModel.metadata.create_all(engine)
     with Session(engine) as s:

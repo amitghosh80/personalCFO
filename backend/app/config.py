@@ -6,7 +6,7 @@ from functools import lru_cache
 class Settings(BaseSettings):
     encryption_key: str = ""
     database_url: str = "sqlite:///./personalcfo.db"
-    max_upload_size_mb: int = 10
+    max_upload_size_mb: int = 20  # PRD F1: ~5 years of monthly statements
     anthropic_api_key: str = ""
     ai_categorizer_model: str = "claude-haiku-4-5"
     chat_model: str = "claude-sonnet-4-6"

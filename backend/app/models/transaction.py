@@ -11,6 +11,7 @@ class TransactionType(str, Enum):
 
 class IncomeCategory(str, Enum):
     salary = "salary"
+    freelance = "freelance"
     interest = "interest"
     rental = "rental"
     gig = "gig"
@@ -35,10 +36,18 @@ class Transaction(SQLModel, table=True):
 
     expense_category: Optional[str] = Field(default=None)       # primary taxonomy key
     expense_subcategory: Optional[str] = Field(default=None)    # detailed taxonomy key
-    category_source: Optional[str] = Field(default=None)        # "rule" | "ai" | "fallback"
+    category_source: Optional[str] = Field(default=None)        # "rule" | "ai" | "user" | "fallback"
+    category_confidence: Optional[float] = Field(default=None)  # 0.0–1.0
+    confidence_label: Optional[str] = Field(default=None)       # "high" | "medium" | "low"
 
     is_ambiguous: bool = Field(default=False)
     ambiguity_reason: Optional[str] = Field(default=None)
     is_duplicate: bool = Field(default=False)
+
+    # Cross-account transfer detection (F1). A "paired" transfer is excluded from
+    # spending + income; an "unconfirmed" one is flagged for the user to confirm.
+    is_transfer: bool = Field(default=False)
+    transfer_status: Optional[str] = Field(default=None)   # "paired" | "unconfirmed"
+    transfer_pair_id: Optional[int] = Field(default=None)  # the matched transaction's id
 
     created_at: datetime = Field(default_factory=datetime.utcnow)

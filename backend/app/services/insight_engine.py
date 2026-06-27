@@ -9,9 +9,9 @@ from typing import Optional
 from sqlmodel import Session, select
 
 from ..models.insight import Insight, InsightType, Severity
-from ..models.transaction import TransactionType
+from ..models.transaction import Transaction, TransactionType
 from ..services.expense_categorizer import CATEGORY_DISPLAY
-from ..services.analytics import load_ledger, is_transfer as _is_transfer
+from ..services.analytics import load_ledger, cashflow_summary, is_transfer as _is_transfer
 
 _load_txns = load_ledger
 
@@ -876,11 +876,9 @@ def _dedup_key(d: dict) -> tuple:
     return (d["insight_type"], cat, d.get("time_period_start"), d.get("time_period_end"))
 
 
-def generate_insights(session: Session, job_id: str) -> list[Insight]:
-    txns = _load_txns(session)
-    if not txns:
-        return []
-
+def _run_detectors(txns: list[dict], job_id: str = "") -> list[dict]:
+    """Run the full detector battery over a ledger and return candidate insight
+    dicts. Pure: no dedup, no persistence. `job_id` only labels the dicts."""
     months = sorted(set(t["month"] for t in txns))
     # For debit-based detectors, use months that actually have debit activity
     debit_month_set = {
@@ -908,6 +906,99 @@ def generate_insights(session: Session, job_id: str) -> list[Insight]:
         candidates.extend(_cashflow_risk(txns, debit_months, job_id))
         candidates.extend(_subscription_creep(txns, debit_months, job_id))
         candidates.extend(_category_spike(txns, debit_months, job_id))
+
+    return candidates
+
+
+def collect_signals(session: Session) -> list[dict]:
+    """Whole-ledger detector signals as plain dicts, without persisting anything.
+
+    This is the grounded candidate set the AI insight layer reasons over. The
+    `import_job_id` field on each dict is a harmless empty-string label."""
+    txns = _load_txns(session)
+    if not txns:
+        return []
+    return _run_detectors(txns)
+
+
+# ─── Proactive post-import observations (PRD F4) ─────────────────────────────
+#
+# The PRD asks the chatbot to surface 2–3 plain-language observations right after
+# each import — at least one spending observation and one income/cashflow
+# observation, each citing a real number. This is a thin selector over the same
+# detector battery (the grounded signal source); it does not persist anything and
+# is intentionally far narrower than the full insight feed.
+
+_SPENDING_OBS_PRIORITY = [
+    InsightType.spending_increase,
+    InsightType.merchant_spike,
+    InsightType.category_spike,
+    InsightType.top_spending_category,
+    InsightType.large_expense,
+]
+
+
+def proactive_observations(session: Session, job_id: str) -> list[dict]:
+    """Return 2–3 grounded observations for the chat window after an import.
+
+    Each observation is ``{kind, title, text}`` where ``kind`` is one of
+    ``summary`` | ``spending`` | ``anomaly``. Always includes an income/cashflow
+    summary scoped to the imported period, plus the most salient spending signal
+    and (if present) one anomaly. Returns ``[]`` only when there is no data.
+    """
+    txns = _load_txns(session)
+    if not txns:
+        return []
+
+    candidates = _run_detectors(txns, job_id)
+    observations: list[dict] = []
+
+    # 1) Income/cashflow summary, scoped to the months this import touched.
+    job_rows = session.exec(
+        select(Transaction)
+        .where(Transaction.import_job_id == job_id)
+        .where(Transaction.is_duplicate == False)   # noqa: E712
+        .where(Transaction.is_ambiguous == False)    # noqa: E712
+    ).all()
+    if job_rows:
+        months = sorted({r.date.strftime("%Y-%m") for r in job_rows})
+        latest = months[-1]
+        cf = cashflow_summary(session, {"month": latest})
+        net = cf["net_cashflow"]
+        label = _fmt(latest)
+        sign = "+" if net >= 0 else "-"
+        observations.append({
+            "kind": "summary",
+            "title": f"Imported {len(job_rows)} transactions from {label}",
+            "text": (f"This import added {len(job_rows)} transactions. Your net cash flow "
+                     f"for {label} was {sign}${abs(net):,.2f} "
+                     f"(${cf['total_credits']:,.2f} in, ${cf['total_debits']:,.2f} out)."),
+        })
+
+    # 2) Most salient spending observation.
+    spending = None
+    for itype in _SPENDING_OBS_PRIORITY:
+        match = next((c for c in candidates if c["insight_type"] == itype), None)
+        if match:
+            spending = {"kind": "spending", "title": match["title"], "text": match["explanation"]}
+            break
+    if spending:
+        observations.append(spending)
+
+    # 3) One anomaly (possible duplicate charge), if distinct from above.
+    dup = next((c for c in candidates if c["insight_type"] == InsightType.duplicate_charge), None)
+    if dup and (not spending or dup["title"] != spending["title"]):
+        observations.append({"kind": "anomaly", "title": dup["title"], "text": dup["explanation"]})
+
+    return observations[:3]
+
+
+def generate_insights(session: Session, job_id: str) -> list[Insight]:
+    txns = _load_txns(session)
+    if not txns:
+        return []
+
+    candidates = _run_detectors(txns, job_id)
 
     # Deduplicate against existing non-dismissed insights
     existing = session.exec(select(Insight).where(Insight.is_dismissed == False)).all()  # noqa: E712
