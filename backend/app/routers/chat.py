@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from sqlmodel import Session
 
 from ..database import get_session
+from ..services.analytics import data_coverage, starter_questions
 from ..services.chat_service import answer_question
 
 router = APIRouter(prefix="/api", tags=["chat"])
@@ -22,8 +23,17 @@ class ChatRequest(BaseModel):
 def chat(req: ChatRequest, session: Session = Depends(get_session)):
     history = [{"role": m.role, "content": m.content} for m in req.history]
     try:
-        return answer_question(session, req.question, history)
+        result = answer_question(session, req.question, history)
     except RuntimeError as e:  # config problem (e.g. missing API key)
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:  # upstream/model failure
         raise HTTPException(status_code=502, detail=f"Chat failed: {e}")
+    # Attach the data scope so the UI can show a coverage footer.
+    result["coverage"] = data_coverage(session)
+    return result
+
+
+@router.get("/chat/starters")
+def chat_starters(session: Session = Depends(get_session)):
+    """Contextual suggested questions for the chat screen."""
+    return {"questions": starter_questions(session)}

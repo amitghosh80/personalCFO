@@ -449,7 +449,7 @@ TOOLS = [
     },
     {
         "name": "income_summary",
-        "description": "Income for a period broken down by income category (salary, interest, rental, gig, other). Prefers confirmed income.",
+        "description": "Income for a period broken down by income category (salary, freelance, interest, rental, gig, other). Prefers confirmed income.",
         "input_schema": {"type": "object", "properties": {"period": _PERIOD_SCHEMA}},
     },
     {
@@ -503,6 +503,46 @@ _DISPATCH = {
         a.get("min_amount"), a.get("max_amount"), a.get("merchant_contains"),
         a.get("txn_type"), a.get("limit", 50), today),
 }
+
+
+def data_coverage(session: Session) -> dict:
+    """Date range + distinct accounts the ledger covers, for the chat scope
+    footer ("Based on your Jan–May 2026 data from N accounts")."""
+    rows = session.exec(
+        select(Transaction)
+        .where(Transaction.is_duplicate == False)   # noqa: E712
+        .where(Transaction.is_ambiguous == False)    # noqa: E712
+    ).all()
+    if not rows:
+        return {"date_range": None, "account_count": 0, "institutions": [], "transaction_count": 0}
+    dates = [r.date for r in rows]
+    institutions = sorted({r.institution for r in rows if r.institution})
+    return {
+        "date_range": {"from": str(min(dates)), "to": str(max(dates))},
+        "account_count": len(institutions) or 1,
+        "institutions": institutions,
+        "transaction_count": len(rows),
+    }
+
+
+def starter_questions(session: Session) -> list[str]:
+    """4–6 suggested questions, contextual to what the user actually imported."""
+    txns = load_ledger(session)
+    questions = [
+        "What did I spend the most on last month?",
+        "How much did I spend on dining last month?",
+        "What subscriptions am I paying for?",
+        "Did I save money last month?",
+    ]
+    income_cats = {
+        t["income_category"] for t in txns
+        if t["type"] == TransactionType.credit and (t["is_income_candidate"] or t["income_confirmed"])
+    }
+    if "freelance" in income_cats:
+        questions.append("How much freelance income did I earn this year?")
+    if "gig" in income_cats:
+        questions.append("How much did I earn from gig work this year?")
+    return questions[:6]
 
 
 def dispatch_tool(session: Session, name: str, tool_input: dict, today: date | None = None) -> dict:
