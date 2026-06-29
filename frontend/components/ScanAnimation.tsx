@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getTransactions } from "@/lib/api";
+import StepNav from "@/components/StepNav";
 import type { Transaction, UploadResult } from "@/lib/types";
 
 /**
@@ -178,6 +179,13 @@ export default function ScanAnimation({ jobId }: { jobId: string }) {
           </button>
         </div>
       )}
+
+      <StepNav
+        backHref="/"
+        backLabel="Upload"
+        onNext={goToReview}
+        nextLabel="Income review"
+      />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getImportSummary } from "@/lib/api";
+import StepNav from "@/components/StepNav";
 import type { ImportSummary as ImportSummaryType, MonthlyRow } from "@/lib/types";
 
 // Keys mirror backend TAXONOMY primaries in expense_categorizer.py.
@@ -214,19 +215,13 @@ export default function ImportSummary({ jobId }: { jobId: string }) {
       )}
 
       {/* Actions */}
-      <div className="flex gap-3">
-        <button
-          onClick={() => router.push(`/import/${jobId}/income`)}
-          className="px-5 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
-        >
-          Review Income
-        </button>
-        <button
-          onClick={() => router.push(`/transactions?job=${jobId}`)}
-          className="flex-1 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors"
-        >
-          View Transactions
-        </button>
+      <StepNav
+        className="mt-0"
+        backHref={`/import/${jobId}/income`}
+        backLabel="Income review"
+        onNext={() => router.push(`/transactions?job=${jobId}`)}
+        nextLabel="View Transactions"
+      >
         <button
           onClick={() => router.push(`/chat?job=${jobId}`)}
           className="px-5 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
@@ -239,7 +234,7 @@ export default function ImportSummary({ jobId }: { jobId: string }) {
         >
           Import More
         </button>
-      </div>
+      </StepNav>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { confirmIncome, getIncomeReview } from "@/lib/api";
 import { exportToExcel } from "@/lib/export";
+import StepNav from "@/components/StepNav";
 import type { IncomeCategory, Transaction } from "@/lib/types";
 
 const CATEGORY_LABELS: Record<IncomeCategory, string> = {
@@ -225,14 +226,14 @@ export default function IncomeReview({ jobId }: { jobId: string }) {
         </div>
       )}
 
-      <div className="mt-8 flex gap-3 flex-wrap">
-        <button
-          onClick={handleConfirm}
-          disabled={saving}
-          className="flex-1 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-40 transition-colors"
-        >
-          {saving ? "Saving…" : "Confirm & Continue"}
-        </button>
+      <StepNav
+        backHref="/"
+        backLabel="Upload"
+        onNext={handleConfirm}
+        nextLabel="Confirm & Continue"
+        nextDisabled={saving}
+        nextLoading={saving}
+      >
         {credits.length > 0 && (
           <button
             onClick={handleExport}
@@ -250,7 +251,7 @@ export default function IncomeReview({ jobId }: { jobId: string }) {
         >
           Skip for now
         </button>
-      </div>
+      </StepNav>
     </div>
   );
 }
