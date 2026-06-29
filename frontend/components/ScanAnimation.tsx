@@ -181,7 +181,7 @@ export default function ScanAnimation({ jobId }: { jobId: string }) {
       )}
 
       <StepNav
-        backHref="/"
+        backHref="/app"
         backLabel="Upload"
         onNext={goToReview}
         nextLabel="Income review"

@@ -227,7 +227,7 @@ export default function IncomeReview({ jobId }: { jobId: string }) {
       )}
 
       <StepNav
-        backHref="/"
+        backHref="/app"
         backLabel="Upload"
         onNext={handleConfirm}
         nextLabel="Confirm & Continue"

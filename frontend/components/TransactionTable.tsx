@@ -134,7 +134,7 @@ export default function TransactionTable({ jobId }: { jobId?: string }) {
             {filtered.length} of {transactions.length} shown
           </p>
         </div>
-        <a href="/" className="text-sm text-blue-600 hover:underline">+ Import more</a>
+        <a href="/app" className="text-sm text-blue-600 hover:underline">+ Import more</a>
       </div>
 
       <div className="flex gap-3 mb-4 flex-wrap">
