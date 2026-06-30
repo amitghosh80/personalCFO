@@ -75,3 +75,32 @@ def test_system_prompt_includes_todays_date(make_txn):
     chat_service.answer_question(s, "hello", [], client=client, model="m", today=TODAY)
     system_arg = client.calls[0]["system"]
     assert "2026-06-06" in system_arg
+
+
+def test_system_prompt_includes_data_coverage_range(make_txn):
+    """The model must know the actual data window so relative periods that fall
+    outside it (e.g. 'last month' when data is months old) don't silently return
+    $0 with no explanation."""
+    s = make_txn.__self_session__
+    make_txn(day="2026-02-10", amount=50.0, txn_type=TransactionType.debit,
+             description="SAFEWAY", expense_category="food_and_drink")
+    make_txn(day="2026-04-05", amount=80.0, txn_type=TransactionType.debit,
+             description="SHELL", expense_category="transportation")
+    client = FakeClient([
+        SimpleNamespace(stop_reason="end_turn", content=[_text_block("ok")]),
+    ])
+    chat_service.answer_question(s, "what did I spend?", [], client=client, model="m", today=TODAY)
+    system_arg = client.calls[0]["system"]
+    assert "2026-02-10" in system_arg
+    assert "2026-04-09" not in system_arg  # actual max is 2026-04-05
+    assert "2026-04-05" in system_arg
+
+
+def test_system_prompt_handles_empty_ledger(make_txn):
+    """No imported data: prompt should still build (no coverage range crash)."""
+    s = make_txn.__self_session__
+    client = FakeClient([
+        SimpleNamespace(stop_reason="end_turn", content=[_text_block("ok")]),
+    ])
+    chat_service.answer_question(s, "what did I spend?", [], client=client, model="m", today=TODAY)
+    assert client.calls[0]["system"]  # built without error

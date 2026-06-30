@@ -10,7 +10,7 @@ from datetime import date
 from sqlmodel import Session
 
 from ..config import get_settings
-from .analytics import TOOLS, dispatch_tool
+from .analytics import TOOLS, data_coverage, dispatch_tool
 
 SYSTEM_PROMPT = """You are the analyst inside a personal finance app. You answer \
 questions about the user's imported bank and card transactions.
@@ -23,12 +23,34 @@ imported accounts...".
 - "Spending" excludes money movement (transfers, credit-card payments, \
 investments). Use spending_by_category for spending questions and cashflow_summary \
 for money-in-vs-out questions.
+- The imported data only covers the date range stated above. If a question uses a \
+relative period ("last month", "this month", "this year") that falls partly or \
+wholly outside that range, do not just report $0 — say the requested period is \
+outside the imported data and answer for the covered range instead (e.g. the most \
+recent month or quarter that has data). When the period is ambiguous, prefer \
+querying the covered range over a relative preset.
 - If the tools cannot answer, say so plainly and suggest what the user could import \
 or confirm. Do not invent an answer.
 - When a figure depends on auto-categorization or unconfirmed income, add a brief \
 caveat (e.g. "based on auto-categorization").
 - Give descriptive analysis only. Do not give financial, tax, or legal advice.
 Be concise and use plain dollar figures."""
+
+
+def _coverage_line(session: Session) -> str:
+    """One-line description of the imported data window for the system prompt, so
+    the model never answers a relative-period question against data it can't see."""
+    cov = data_coverage(session)
+    dr = cov.get("date_range")
+    if not dr:
+        return "No transactions have been imported yet."
+    accounts = cov.get("account_count", 0)
+    acct = f"{accounts} account" + ("s" if accounts != 1 else "")
+    return (
+        f"The imported data covers {dr['from']} to {dr['to']} "
+        f"across {acct} ({cov.get('transaction_count', 0)} transactions). "
+        f"There is no data outside this date range."
+    )
 
 _MAX_TOKENS = 2048
 
@@ -59,7 +81,10 @@ def answer_question(
     client = client or _build_client()
     model = model or get_settings().chat_model
     effective_today = today or date.today()
-    system = f"Today's date is {effective_today.isoformat()}.\n\n{SYSTEM_PROMPT}"
+    system = (
+        f"Today's date is {effective_today.isoformat()}.\n"
+        f"{_coverage_line(session)}\n\n{SYSTEM_PROMPT}"
+    )
 
     messages = list(history or []) + [{"role": "user", "content": question}]
     tools_used: list[dict] = []
