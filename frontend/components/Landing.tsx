@@ -119,6 +119,17 @@ const CONFIDENCE_STYLES: Record<string, string> = {
   medium: "bg-amber-100 text-amber-800",
 };
 
+// Hero ledger mockup: one card showing parsing + expense categorization +
+// income classification at a glance. Labels/colors mirror the in-app taxonomy
+// (TransactionTable / IncomeReview); numbers are specific per spec §6.
+const LEDGER: { date: string; merchant: string; amount: string; credit?: boolean; cat: string; cls: string }[] = [
+  { date: "Jun 1", merchant: "Gusto Payroll", amount: "+$6,250.00", credit: true, cat: "Salary", cls: "bg-green-100 text-green-800" },
+  { date: "Jun 3", merchant: "Whole Foods Market", amount: "−$142.30", cat: "Food & Drink", cls: "bg-orange-50 text-orange-700" },
+  { date: "Jun 5", merchant: "Chevron", amount: "−$61.20", cat: "Transportation", cls: "bg-slate-100 text-slate-600" },
+  { date: "Jun 6", merchant: "Stripe Transfer", amount: "+$1,800.00", credit: true, cat: "Freelance", cls: "bg-teal-100 text-teal-800" },
+  { date: "Jun 7", merchant: "Netflix", amount: "−$15.49", cat: "Subscriptions", cls: "bg-violet-100 text-violet-700" },
+];
+
 function Wordmark({ className = "" }: { className?: string }) {
   return (
     <span className={`font-bold tracking-tight ${className}`}>
@@ -184,23 +195,54 @@ export default function Landing() {
             <p className="mt-4 text-sm text-gray-400">No bank credentials required · Encrypted at rest.</p>
           </div>
 
-          {/* Hero visual: one traceable mock chat exchange (spec §5.2). */}
-          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5 shadow-sm">
-            <div className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-3">
-              Ask your money
-            </div>
-            <div className="space-y-3">
-              <div className="text-right">
-                <div className="inline-block rounded-2xl rounded-br-sm bg-blue-600 text-white px-4 py-2 text-sm max-w-[85%]">
-                  How much did I spend on dining last month?
-                </div>
+          {/* Hero visuals: product mockups showing what the system produces —
+              a categorized ledger (parsing + expense/income classification) and
+              a traceable chat answer (spec §5.2). */}
+          <div className="space-y-4">
+            {/* Categorized ledger preview */}
+            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                  Your categorized ledger
+                </span>
+                <span className="text-[11px] text-gray-400">2 accounts · auto-categorized</span>
               </div>
-              <div className="text-left">
-                <div className="inline-block rounded-2xl rounded-bl-sm bg-white border border-gray-200 text-gray-800 px-4 py-2 text-sm max-w-[90%]">
-                  <span className="font-semibold">$1,240</span> — up 38% from your 3-month average of
-                  $897, driven by 5 charges over $100.
+              <div className="divide-y divide-gray-100">
+                {LEDGER.map((r) => (
+                  <div key={r.merchant} className="flex items-center gap-3 py-2">
+                    <span className="text-xs text-gray-400 w-12 shrink-0">{r.date}</span>
+                    <span className="text-sm text-gray-700 truncate flex-1">{r.merchant}</span>
+                    <span
+                      className={`text-sm font-medium tabular-nums shrink-0 ${r.credit ? "text-green-700" : "text-gray-700"}`}
+                    >
+                      {r.amount}
+                    </span>
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium shrink-0 ${r.cls}`}>
+                      {r.cat}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Ask CFO chat */}
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5 shadow-sm">
+              <div className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-3">
+                Ask your money
+              </div>
+              <div className="space-y-3">
+                <div className="text-right">
+                  <div className="inline-block rounded-2xl rounded-br-sm bg-blue-600 text-white px-4 py-2 text-sm max-w-[85%]">
+                    How much did I spend on dining last month?
+                  </div>
                 </div>
-                <div className="text-[11px] text-gray-400 mt-1">based on: spending_by_category</div>
+                <div className="text-left">
+                  <div className="inline-block rounded-2xl rounded-bl-sm bg-white border border-gray-200 text-gray-800 px-4 py-2 text-sm max-w-[90%]">
+                    <span className="font-semibold">$1,240</span> — up 38% from your 3-month average of
+                    $897, driven by 5 charges over $100.
+                  </div>
+                  <div className="text-[11px] text-gray-400 mt-1">based on: spending_by_category</div>
+                </div>
               </div>
             </div>
           </div>
@@ -354,6 +396,17 @@ export default function Landing() {
               </li>
             ))}
           </ul>
+
+          {/* Transparency on AI processing — honest about what leaves the device,
+              per spec §5.8 (don't promise more than the system provides). */}
+          <div className="mt-8 rounded-xl border border-gray-200 bg-gray-50 p-5">
+            <h3 className="text-sm font-semibold text-gray-900">How AI features handle your data</h3>
+            <p className="mt-2 text-sm text-gray-600 leading-relaxed">
+              Categorization and chat send the minimum necessary data to our model provider, under terms
+              that prohibit training on it — never your bank login, never your full account numbers. Your
+              statements stay in your own encrypted ledger; nothing is sold or used to build a profile.
+            </p>
+          </div>
         </div>
       </section>
 
