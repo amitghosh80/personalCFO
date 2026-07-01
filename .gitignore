@@ -38,3 +38,12 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Logs
+*.log
+
+# Office temp/lock files
+~$*
+
+# TypeScript build cache
+*.tsbuildinfo
