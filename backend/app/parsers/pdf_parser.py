@@ -9,7 +9,7 @@ _INSTITUTION_KEYWORDS: dict[str, list[str]] = {
     # First Tech must come before Chase/Amex: First Tech checking statements
     # contain "JPMorgan Chase" and "AMEX EPAYMENT" in transaction descriptions,
     # which would falsely trigger those institutions if checked first.
-    "First Tech": ["first technology federal", "first tech federal", "firsttech.com"],
+    "First Tech": ["first technology federal", "first tech federal", "firsttech.com", "firsttechfed.com", "firsttechfed"],
     "Chase": ["jpmorgan chase", "chase bank", "chase.com"],
     "Bank of America": ["bank of america", "bankofamerica"],
     "Wells Fargo": ["wells fargo"],
@@ -35,8 +35,11 @@ _SUMMARY_LINE_RE = re.compile(
 )
 
 
+# Tolerate punctuation/words between "payment" and the acknowledgment word so
+# lines like "AUTOMATIC PAYMENT - THANK YOU" still match (the " - " separator
+# previously defeated a strict `payment\s+thank`).
 _PAYMENT_ACK_RE = re.compile(
-    r"payment\s+(thank\s+you|received|processed|applied|credit)",
+    r"payment\b[\s\-]+(thank\s+you|received|processed|applied|credit)",
     re.IGNORECASE,
 )
 
@@ -221,10 +224,19 @@ def _parse_text_lines(text: str, invert_sign: bool = False) -> dict:
             if not parsed_date:
                 continue
 
-            # Bank statements often end each line with a running balance after the
-            # transaction amount. When two or more amounts are present, the last is
-            # the running balance; use the second-to-last as the transaction amount.
-            txn_amount_str = amount_matches[-2] if len(amount_matches) >= 2 else amount_matches[-1]
+            # Amex foreign-currency rows print "<foreign> $<usd>": the USD charge
+            # is $-prefixed and is the real transaction amount, not a running
+            # balance. When the last amount is $-prefixed and the prior one is not,
+            # take the USD figure. Otherwise, bank statements end each line with a
+            # running balance after the transaction amount, so when two or more
+            # amounts are present the last is the balance — use the second-to-last.
+            if len(amount_matches) >= 2:
+                if "$" in amount_matches[-1] and "$" not in amount_matches[-2]:
+                    txn_amount_str = amount_matches[-1]
+                else:
+                    txn_amount_str = amount_matches[-2]
+            else:
+                txn_amount_str = amount_matches[-1]
             raw_amount = txn_amount_str.replace("$", "").replace(",", "")
             value = float(raw_amount)
 
