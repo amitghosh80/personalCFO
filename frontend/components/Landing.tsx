@@ -12,29 +12,29 @@ import Link from "next/link";
 
 const COMPARISON: { dimension: string; chatgpt: string; cfo: string }[] = [
   {
-    dimension: "Memory",
-    chatgpt: "Each conversation starts from zero; statements get re-pasted next month.",
-    cfo: "Every import adds to one permanent, structured ledger that gets smarter over time.",
+    dimension: "Who does the math",
+    chatgpt: "Computes totals by reasoning over rows in the prompt — it can miscategorize a row, get a credit-card sign backwards, and confidently return the wrong total.",
+    cfo: "Never does the arithmetic. The chatbot calls structured tools that query the database; the model only reads back the result.",
   },
   {
-    dimension: "Accuracy",
-    chatgpt: "Reads numbers off a PDF and reasons in prose; estimates and rounding aren't traceable.",
-    cfo: "Every dollar in every answer comes from a tool call against the real transaction database — never generated, never estimated.",
+    dimension: "Data volume",
+    chatgpt: "3 accounts × 12 months is 3,000–5,000+ transactions — past the point a context window holds, so you re-upload every session and overlapping dates get double-counted.",
+    cfo: "Builds one persistent, deduplicated ledger that grows with each import — nothing to re-paste, no double-counting.",
   },
   {
-    dimension: "Parsing",
-    chatgpt: "One format, one institution, one shot; mixed PDF layouts and sign conventions trip up a general model.",
-    cfo: "Purpose-built parsers per institution, with automatic sign-convention detection and duplicate removal across files.",
-  },
-  {
-    dimension: "Proactivity",
-    chatgpt: "Only answers what you think to ask.",
-    cfo: "A 10-signal Insight Feed flags cashflow risk, subscription creep, duplicate charges, and spending spikes automatically.",
+    dimension: "Statement parsing",
+    chatgpt: "Every bank uses different sign conventions, layouts, and encodings. A general model parses them inconsistently and fails silently.",
+    cfo: "Institution-specific parsers with automatic sign-inversion detection and duplicate removal across files.",
   },
   {
     dimension: "Income intelligence",
-    chatgpt: "Treats every deposit the same.",
-    cfo: "Classifies salary, freelance, rental, interest, and gig income, and asks you to confirm what it's unsure about.",
+    chatgpt: "Treats every deposit the same, and you'd re-explain what's salary vs. transfer vs. refund every month.",
+    cfo: "A classification layer separates salary, freelance, rental, interest, and gig income, asks you to confirm the unsure ones, and persists the decision.",
+  },
+  {
+    dimension: "Proactivity",
+    chatgpt: "A chat session can only answer what you ask — it can't surface what you didn't think to ask about.",
+    cfo: "Flags new subscriptions, duplicate charges, and cashflow risk on its own, because it remembers across months.",
   },
   {
     dimension: "Privacy",
@@ -43,8 +43,8 @@ const COMPARISON: { dimension: string; chatgpt: string; cfo: string }[] = [
   },
   {
     dimension: "Auditability",
-    chatgpt: "A paragraph of prose with no way to check its work.",
-    cfo: "Every insight links back to the specific transactions behind it, with a confidence score attached.",
+    chatgpt: "A fluent paragraph with no way to check its work.",
+    cfo: "Every figure links back to the exact transactions behind it, with a confidence score attached.",
   },
 ];
 
@@ -271,8 +271,11 @@ export default function Landing() {
               Why not just paste your statements into ChatGPT?
             </h2>
             <p className="mt-4 text-lg text-gray-600">
-              You can — and you&apos;ll get an answer. The question is whether you can trust it, and
-              whether it&apos;s still there next month.
+              You can — ChatGPT and Claude will parse a statement and answer. The difference
+              isn&apos;t capability, it&apos;s <span className="font-semibold text-gray-900">who does
+              the math</span>: they compute totals by reasoning over rows in the prompt, while
+              personalCFO runs the numbers in code and has the model read the result. For money,
+              &ldquo;fluent but occasionally wrong&rdquo; is worse than a number you can trust.
             </p>
           </div>
 
@@ -306,8 +309,8 @@ export default function Landing() {
           </div>
 
           <blockquote className="mt-12 border-l-4 border-blue-600 pl-6 text-xl md:text-2xl font-medium text-gray-800 leading-snug">
-            ChatGPT is a brilliant generalist. personalCFO is the one place that already knows your
-            transactions — and only ever tells you what they actually say.
+            ChatGPT does the math itself and sometimes gets it wrong. personalCFO does the math in
+            code and has the LLM read the answer.
           </blockquote>
         </div>
       </section>
