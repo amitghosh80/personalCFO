@@ -56,6 +56,17 @@ export async function getImportSummary(jobId: string): Promise<ImportSummary> {
   return handleResponse<ImportSummary>(res);
 }
 
+export interface IncomeReviewStatus {
+  incomplete: boolean;
+  unreviewed_count: number;
+  job_id: string | null;
+}
+
+export async function getIncomeReviewStatus(): Promise<IncomeReviewStatus> {
+  const res = await fetch(`${API}/api/income/review-status`);
+  return handleResponse<IncomeReviewStatus>(res);
+}
+
 // ─── Categorization (F3) ──────────────────────────────────────────────────────
 
 export async function getTaxonomy(): Promise<TaxonomyResponse> {

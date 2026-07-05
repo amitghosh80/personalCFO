@@ -103,6 +103,26 @@ def confirm_income(
     return {"updated": updated}
 
 
+@router.get("/income/review-status")
+def income_review_status(session: Session = Depends(get_session)):
+    """Whether any auto-detected income is still unreviewed (skipped or not yet
+    confirmed/denied), so the app can show a persistent 'income incomplete'
+    banner linking back to review (PRD F2 / AMI-24)."""
+    rows = session.exec(
+        select(Transaction)
+        .where(Transaction.is_income_candidate == True)   # noqa: E712
+        .where(Transaction.income_confirmed == None)        # noqa: E711
+        .where(Transaction.is_duplicate == False)           # noqa: E712
+        .order_by(Transaction.id.desc())
+    ).all()
+    return {
+        "incomplete": len(rows) > 0,
+        "unreviewed_count": len(rows),
+        # Link the banner to the most recent import that still needs review.
+        "job_id": rows[0].import_job_id if rows else None,
+    }
+
+
 @router.get("/import/{job_id}/summary")
 def get_import_summary(job_id: str, session: Session = Depends(get_session)):
     from collections import defaultdict
