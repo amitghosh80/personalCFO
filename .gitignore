@@ -18,6 +18,8 @@ build/
 *.db-shm
 *.db-wal
 *.db-journal
+*.db.*
+*.bak
 
 # Next.js
 frontend/.next/

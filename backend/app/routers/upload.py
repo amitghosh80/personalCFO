@@ -10,7 +10,7 @@ from ..models.import_job import ImportJob, ImportStatus
 from ..models.transaction import Transaction, TransactionType
 from ..parsers.csv_parser import parse_csv
 from ..parsers.pdf_parser import parse_pdf
-from ..services.duplicate_detector import is_duplicate
+from ..services.duplicate_detector import is_duplicate, file_already_imported
 from ..services.encryption import encrypt
 from ..services.expense_categorizer import categorize_expense
 from ..services.income_classifier import classify_income
@@ -80,6 +80,16 @@ async def upload_statements(
             continue
 
         file_hash = hashlib.sha256(content).hexdigest()
+
+        # Skip a file whose exact content was already imported. is_duplicate()
+        # only flags identical rows from a *different* hash, so without this a
+        # same-file re-upload would duplicate the whole statement.
+        if file_already_imported(session, file_hash):
+            file_results.append({
+                "file": upload.filename,
+                "error": "Already imported — skipped to avoid duplicates",
+            })
+            continue
 
         try:
             parsed = parse_pdf(content) if _is_pdf(content) else parse_csv(content)
