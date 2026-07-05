@@ -6,9 +6,9 @@ function is deterministic: given the same ledger and parameters, it returns the
 same numbers. The chat layer never computes financial figures itself.
 """
 import re
-from calendar import monthrange
+from calendar import monthrange, month_name, month_abbr
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 
 from sqlmodel import Session, select
 
@@ -88,6 +88,40 @@ def _in_range(t: dict, start: date, end: date) -> bool:
     return start <= t["date"] <= end
 
 
+# Uncategorized-data thresholds — mirror app/routers/categories.py; keep in sync.
+_UNCAT_COUNT_THRESHOLD = 0.10   # >10% of spending transactions
+_UNCAT_SPEND_THRESHOLD = 0.15   # >15% of spend dollars
+
+
+def uncategorized_status(session: Session) -> dict:
+    """How much spending is still uncategorized and whether it exceeds the alert
+    thresholds. Gates the chatbot from surfacing spending insights on data that is
+    too incompletely categorized to trust (PRD F3 / AMI-33)."""
+    rows = session.exec(
+        select(Transaction)
+        .where(Transaction.transaction_type == TransactionType.debit)
+        .where(Transaction.is_duplicate == False)  # noqa: E712
+    ).all()
+    debits = [t for t in rows if is_spending(t.expense_category or "other")]
+    total_count = len(debits)
+    total_spend = sum(t.amount for t in debits)
+
+    def _uncat(t) -> bool:
+        return (t.expense_category in (None, "other")) or (t.confidence_label == "low")
+
+    unc = [t for t in debits if _uncat(t)]
+    pct_count = (len(unc) / total_count) if total_count else 0.0
+    pct_spend = (sum(t.amount for t in unc) / total_spend) if total_spend else 0.0
+    return {
+        "over": pct_count > _UNCAT_COUNT_THRESHOLD or pct_spend > _UNCAT_SPEND_THRESHOLD,
+        "pct_count": pct_count,
+        "pct_spend": pct_spend,
+        "unc_count": len(unc),
+        "unc_spend": round(sum(t.amount for t in unc), 2),
+        "total_count": total_count,
+    }
+
+
 # ─── Period resolution ─────────────────────────────────────────────────────────
 
 def _month_start(y: int, m: int) -> date:
@@ -103,11 +137,105 @@ def _add_months(y: int, m: int, delta: int) -> tuple[int, int]:
     return idx // 12, idx % 12 + 1
 
 
-def resolve_period(period: dict | None, today: date | None = None) -> tuple[date, date, str]:
+_MONTHS: dict[str, int] = {}
+for _i in range(1, 13):
+    _MONTHS[month_name[_i].lower()] = _i
+    _MONTHS[month_abbr[_i].lower()] = _i
+
+
+def _month_phrase_to_ym(text: str, today: date) -> tuple[int, int] | None:
+    """Map 'march' / 'march 2025' to (year, month). A bare month name resolves to
+    its most recent past occurrence (future months roll back a year)."""
+    parts = text.strip().split()
+    if not parts or parts[0] not in _MONTHS:
+        return None
+    m = _MONTHS[parts[0]]
+    if len(parts) >= 2 and re.fullmatch(r"20\d{2}", parts[1]):
+        return int(parts[1]), m
+    y = today.year if m <= today.month else today.year - 1
+    return y, m
+
+
+def _parse_nl_period(text: str, today: date) -> dict:
+    """Map a free-form natural-language period to a structured period dict that
+    resolve_period understands. Raises ValueError on an unrecognized phrase."""
+    t = " ".join(text.strip().lower().split())
+
+    presets = {
+        "all time": "all_time", "all-time": "all_time", "everything": "all_time",
+        "this month": "this_month", "last month": "last_month",
+        "this quarter": "this_quarter", "last quarter": "last_quarter",
+        "this year": "this_year", "year to date": "this_year", "ytd": "this_year",
+        "last year": "last_year",
+        "last 3 months": "last_3_months", "last 6 months": "last_6_months",
+        "last 12 months": "last_12_months",
+    }
+    if t in presets:
+        return {"preset": presets[t]}
+
+    if t == "today":
+        return {"start": today.isoformat(), "end": today.isoformat()}
+    if t == "yesterday":
+        d = today - timedelta(days=1)
+        return {"start": d.isoformat(), "end": d.isoformat()}
+    if t in ("last week", "past week", "this week"):
+        return {"start": (today - timedelta(days=6)).isoformat(), "end": today.isoformat()}
+
+    m = re.fullmatch(r"last (\d{1,2}) months?", t)
+    if m:
+        y, mo = _add_months(today.year, today.month, -(int(m.group(1)) - 1))
+        return {"start": _month_start(y, mo).isoformat(), "end": today.isoformat()}
+    m = re.fullmatch(r"last (\d{1,3}) days?", t)
+    if m:
+        return {"start": (today - timedelta(days=int(m.group(1)) - 1)).isoformat(),
+                "end": today.isoformat()}
+
+    m = re.search(r"\bq([1-4])\b", t)
+    if m:
+        ym = re.search(r"\b(20\d{2})\b", t)
+        y = int(ym.group(1)) if ym else today.year
+        return {"quarter": f"{y}-Q{m.group(1)}"}
+
+    if t.startswith("since "):
+        rest = t[len("since "):].strip()
+        ym = _month_phrase_to_ym(rest, today)
+        if ym:
+            return {"start": _month_start(*ym).isoformat(), "end": today.isoformat()}
+        try:
+            return {"start": date.fromisoformat(rest).isoformat(), "end": today.isoformat()}
+        except ValueError:
+            pass
+
+    if re.fullmatch(r"20\d{2}", t):
+        return {"year": t}
+    if re.fullmatch(r"20\d{2}-\d{2}", t):
+        return {"month": t}
+
+    ym = _month_phrase_to_ym(t, today)
+    if ym:
+        return {"month": f"{ym[0]:04d}-{ym[1]:02d}"}
+
+    raise ValueError(f"Unrecognized period phrase: {text!r}")
+
+
+def resolve_period(period: "dict | str | None", today: date | None = None) -> tuple[date, date, str]:
     """Resolve a period spec to (start, end, human_label). All date math lives
-    here so the model never computes dates. `today` is injectable for tests."""
+    here so the model never computes dates. `today` is injectable for tests.
+
+    Accepts a structured dict (preset/month/quarter/year/start-end), a free-form
+    natural-language string ('last week', 'January', 'since March'), or a dict
+    carrying a `text` field with such a string."""
     today = today or date.today()
+
+    if isinstance(period, str):
+        return resolve_period(_parse_nl_period(period, today), today)
+
     period = period or {}
+
+    if period.get("text") and not any(
+        period.get(k) for k in ("preset", "month", "quarter", "year", "start", "end")
+    ):
+        return resolve_period(_parse_nl_period(period["text"], today), today)
 
     if period.get("start") and period.get("end"):
         s = date.fromisoformat(period["start"])
@@ -415,8 +543,11 @@ def search_transactions(
 
 _PERIOD_SCHEMA = {
     "type": "object",
-    "description": "A time period. Use exactly one style.",
+    "description": "A time period. Use exactly one style. If unsure how to map a "
+                   "phrase the user typed, pass it verbatim as `text` (e.g. "
+                   "'last week', 'January', 'since March', 'Q1 2026').",
     "properties": {
+        "text": {"type": "string", "description": "Free-form natural-language period, resolved server-side."},
         "preset": {"type": "string", "enum": [
             "this_month", "last_month", "this_quarter", "last_quarter",
             "this_year", "last_year", "last_3_months", "last_6_months",

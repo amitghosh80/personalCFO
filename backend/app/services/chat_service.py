@@ -10,7 +10,7 @@ from datetime import date
 from sqlmodel import Session
 
 from ..config import get_settings
-from .analytics import TOOLS, data_coverage, dispatch_tool
+from .analytics import TOOLS, data_coverage, dispatch_tool, uncategorized_status
 
 SYSTEM_PROMPT = """You are the analyst inside a personal finance app. You answer \
 questions about the user's imported bank and card transactions.
@@ -72,6 +72,7 @@ def answer_question(
     model: str | None = None,
     today: date | None = None,
     max_iterations: int = 5,
+    suppress_data_warning: bool = False,
 ) -> dict:
     """Run the tool-use loop and return {'answer', 'tools_used'}.
 
@@ -89,6 +90,23 @@ def answer_question(
     messages = list(history or []) + [{"role": "user", "content": question}]
     tools_used: list[dict] = []
     last_text = ""
+
+    def _finalize(answer: str) -> dict:
+        """Prepend a data-quality warning when the answer leans on spending tools
+        and too much spending is still uncategorized to trust (AMI-33)."""
+        used_spending_tool = any(
+            t["name"] in ("spending_by_category", "cashflow_summary") for t in tools_used
+        )
+        if not suppress_data_warning and used_spending_tool:
+            st = uncategorized_status(session)
+            if st["over"]:
+                pct = round(st["pct_count"] * 100)
+                warn = (
+                    f"⚠️ Your spending data may be incomplete — {pct}% of transactions "
+                    f"are uncategorized. Review them for more accurate answers."
+                )
+                answer = f"{warn}\n\n{answer}" if answer else warn
+        return {"answer": answer, "tools_used": tools_used}
 
     for _ in range(max_iterations):
         resp = client.messages.create(
@@ -119,7 +137,7 @@ def answer_question(
             last_text = "\n".join(text_parts).strip()
 
         if resp.stop_reason != "tool_use":
-            return {"answer": last_text, "tools_used": tools_used}
+            return _finalize(last_text)
 
         tool_results = []
         for tu in tool_uses:
@@ -134,5 +152,4 @@ def answer_question(
 
     # Iteration cap reached.
     fallback = "I couldn't fully resolve that with the available data tools."
-    return {"answer": (last_text + "\n\n" + fallback).strip() if last_text else fallback,
-            "tools_used": tools_used}
+    return _finalize((last_text + "\n\n" + fallback).strip() if last_text else fallback)
