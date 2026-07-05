@@ -136,6 +136,14 @@ def _matches_any(desc: str, patterns: list[str]) -> bool:
     return any(re.search(p, desc, re.IGNORECASE) for p in patterns)
 
 
+def credit_expense_category(description: str) -> str | None:
+    """Non-spending expense category to tag a CREDIT transaction with, so card-side
+    incoming payments (PAYMENT THANK YOU, AUTOPAY PAYMENT RECEIVED, ONLINE PAYMENT)
+    are explicitly classified as a credit-card payment rather than left
+    uncategorized. Returns None for a normal, income-bearing credit (AMI-14)."""
+    return "credit_card_payment" if exclude_from_review(description) else None
+
+
 def exclude_from_review(description: str) -> bool:
     """True when a credit transaction should be hidden from the income review UI.
 

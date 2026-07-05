@@ -192,6 +192,9 @@ _RULES: list[tuple[str, str, list[str]]] = [
         r"discover.*\b(e[- ]?pymt|payment)\b", r"\bcardmember\s*serv",
         r"\bautopay\b.*\bcard\b", r"bill\s*pay.*\bcard\s*ending",
         r"card\s*ending\s*in\s*\d+",
+        # Bank of America prints "BANK OF AMERICA CREDITCARD ..." (no space before
+        # 'card', so \bcard\b never matched); also match a bare "creditcard" token.
+        r"bank\s*of\s*america.*credit\s*?card", r"\bcreditcard\b",
     ]),
     # ── Non-spending: transfers ──
     ("transfer", "p2p", [

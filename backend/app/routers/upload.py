@@ -13,7 +13,7 @@ from ..parsers.pdf_parser import parse_pdf
 from ..services.duplicate_detector import is_duplicate, file_already_imported
 from ..services.encryption import encrypt
 from ..services.expense_categorizer import categorize_expense
-from ..services.income_classifier import classify_income
+from ..services.income_classifier import classify_income, credit_expense_category
 from ..services.transfer_detector import detect_and_mark
 from ..config import get_settings
 
@@ -118,8 +118,16 @@ async def upload_statements(
                 # Rule hits are high-confidence; fallbacks await the AI pass.
                 exp_conf, exp_label = (1.0, "high") if exp_source == "rule" else (None, "low")
             else:
-                exp_primary, exp_sub, exp_source = None, None, None
-                exp_conf, exp_label = None, None
+                # Card-side incoming payments (PAYMENT THANK YOU, AUTOPAY RECEIVED)
+                # are tagged as a credit-card payment so they're explicitly a
+                # non-spending transfer, not an uncategorized credit (AMI-14).
+                cc = credit_expense_category(txn_data["description"])
+                if cc:
+                    exp_primary, exp_sub, exp_source = cc, cc, "rule"
+                    exp_conf, exp_label = 1.0, "high"
+                else:
+                    exp_primary, exp_sub, exp_source = None, None, None
+                    exp_conf, exp_label = None, None
 
             txn = Transaction(
                 import_job_id=job_id,
