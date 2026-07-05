@@ -34,3 +34,15 @@ def file_already_imported(session: Session, source_file_hash: str) -> bool:
         Transaction.source_file_hash == source_file_hash
     )
     return session.exec(statement).first() is not None
+
+
+def existing_job_for_file(session: Session, source_file_hash: str) -> str | None:
+    """The import job this file's transactions already live in (most recent),
+    so a skipped re-upload can route the user to their existing import summary
+    instead of dead-ending."""
+    row = session.exec(
+        select(Transaction)
+        .where(Transaction.source_file_hash == source_file_hash)
+        .order_by(Transaction.id.desc())
+    ).first()
+    return row.import_job_id if row else None

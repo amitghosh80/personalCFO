@@ -10,7 +10,11 @@ from ..models.import_job import ImportJob, ImportStatus
 from ..models.transaction import Transaction, TransactionType
 from ..parsers.csv_parser import parse_csv
 from ..parsers.pdf_parser import parse_pdf
-from ..services.duplicate_detector import is_duplicate, file_already_imported
+from ..services.duplicate_detector import (
+    is_duplicate,
+    file_already_imported,
+    existing_job_for_file,
+)
 from ..services.encryption import encrypt
 from ..services.expense_categorizer import categorize_expense
 from ..services.income_classifier import classify_income, credit_expense_category
@@ -60,6 +64,7 @@ async def upload_statements(
 
     file_results = []
     total_saved = 0
+    duplicate_job_id: str | None = None  # existing import for skipped re-uploads
 
     for upload in files:
         content = await upload.read()
@@ -85,10 +90,15 @@ async def upload_statements(
         # only flags identical rows from a *different* hash, so without this a
         # same-file re-upload would duplicate the whole statement.
         if file_already_imported(session, file_hash):
+            existing = existing_job_for_file(session, file_hash)
             file_results.append({
                 "file": upload.filename,
                 "error": "Already imported — skipped to avoid duplicates",
+                "already_imported": True,
+                "existing_job_id": existing,
             })
+            if existing:
+                duplicate_job_id = existing
             continue
 
         try:
@@ -191,6 +201,8 @@ async def upload_statements(
         "transfers_paired": transfer_summary["paired"],
         "transfers_unconfirmed": transfer_summary["unconfirmed"],
         "status": job.status,
+        # When everything was a duplicate, point the UI to the existing import.
+        "existing_job_id": duplicate_job_id,
     }
 
 

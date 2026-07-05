@@ -42,6 +42,8 @@ export interface FileResult {
   duplicate_count?: number;
   ambiguous_count?: number;
   warnings?: string[];
+  already_imported?: boolean;
+  existing_job_id?: string | null;
 }
 
 export interface UploadResult {
@@ -50,6 +52,8 @@ export interface UploadResult {
   total_transactions: number;
   transfers_paired: number;
   transfers_unconfirmed: number;
+  // Set when every uploaded file was a duplicate: the import they already live in.
+  existing_job_id?: string | null;
   status: string;
 }
 

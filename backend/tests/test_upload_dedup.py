@@ -59,3 +59,6 @@ def test_reupload_of_same_file_is_skipped(session):
     fr = body["file_results"][0]
     assert fr.get("transactions_saved", 0) == 0
     assert "already imported" in fr.get("error", "").lower()
+    # The skip must point back to the existing import so the UI isn't a dead end.
+    assert fr.get("existing_job_id") == "prev"
+    assert body.get("existing_job_id") == "prev"

@@ -22,10 +22,13 @@ export default function FileUploader() {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set when every file was a duplicate: the existing import to view instead.
+  const [existingJobId, setExistingJobId] = useState<string | null>(null);
   const router = useRouter();
 
   const onDrop = useCallback((accepted: File[]) => {
     setError(null);
+    setExistingJobId(null);
     setFiles((prev) => {
       // Cap counts only files that are still candidates for upload.
       const current = prev.filter((f) => f.status !== "error").length;
@@ -103,9 +106,18 @@ export default function FileUploader() {
       if (result.total_transactions > 0) {
         router.push(`/import/${result.import_job_id}/scan`);
       } else {
-        // Everything was skipped (e.g. already imported) — stay and show why.
+        // Everything was a duplicate. Don't dead-end — point to the existing
+        // import's summary (category + month-wise totals) if we know it.
         setUploading(false);
-        setError("No new transactions were imported — these files may already have been imported.");
+        const existing =
+          result.existing_job_id ??
+          result.file_results.find((r) => r.existing_job_id)?.existing_job_id ??
+          null;
+        if (existing) {
+          setExistingJobId(existing);
+        } else {
+          setError("No new transactions were imported — these files may already have been imported.");
+        }
       }
     } catch (e) {
       setFiles((prev) =>
@@ -207,6 +219,21 @@ export default function FileUploader() {
         <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
           {error}
         </p>
+      )}
+
+      {existingJobId && (
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+          <p className="text-sm text-blue-800">
+            These statements were already imported. View their spending categories and
+            month-by-month totals.
+          </p>
+          <button
+            onClick={() => router.push(`/import/${existingJobId}/summary`)}
+            className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
+          >
+            View import →
+          </button>
+        </div>
       )}
 
       <button
