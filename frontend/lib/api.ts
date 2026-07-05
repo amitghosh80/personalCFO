@@ -56,6 +56,11 @@ export async function getImportSummary(jobId: string): Promise<ImportSummary> {
   return handleResponse<ImportSummary>(res);
 }
 
+export async function getLedgerSummary(): Promise<import("./types").LedgerSummary> {
+  const res = await fetch(`${API}/api/summary`);
+  return handleResponse<import("./types").LedgerSummary>(res);
+}
+
 export interface IncomeReviewStatus {
   incomplete: boolean;
   unreviewed_count: number;

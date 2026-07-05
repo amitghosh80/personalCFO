@@ -88,6 +88,60 @@ def _in_range(t: dict, start: date, end: date) -> bool:
     return start <= t["date"] <= end
 
 
+def monthly_summary(session: Session) -> dict:
+    """Whole-ledger dashboard: spending by category, per month, across every
+    import. Uses the same load_ledger + is_spending_txn math as the chat tools,
+    so the "View import" dashboard and the chatbot never disagree. Shape mirrors
+    the per-job import summary's monthly_breakdown."""
+    TOP_N = 5
+    ledger = load_ledger(session)
+    buckets: dict[str, dict] = defaultdict(lambda: {"income": 0.0, "expenses": 0.0})
+    cat_buckets: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    has_unreviewed = False
+
+    for t in ledger:
+        month = t["month"]
+        if t["type"] == TransactionType.debit:
+            if not is_spending_txn(t):
+                continue
+            buckets[month]["expenses"] += t["amount"]
+            cat_buckets[month][t["expense_category"]] += t["amount"]
+        else:  # credit
+            if t["income_confirmed"] is True:
+                buckets[month]["income"] += t["amount"]
+            elif t["is_income_candidate"] and t["income_confirmed"] is None:
+                buckets[month]["income"] += t["amount"]
+                has_unreviewed = True
+
+    def _top(month: str) -> list[dict]:
+        ranked = sorted(cat_buckets[month].items(), key=lambda kv: kv[1], reverse=True)
+        return [
+            {"category": c, "display": primary_display(c), "amount": round(a, 2)}
+            for c, a in ranked[:TOP_N]
+        ]
+
+    monthly = [
+        {
+            "month": m,
+            "income": round(d["income"], 2),
+            "expenses": round(d["expenses"], 2),
+            "net": round(d["income"] - d["expenses"], 2),
+            "top_categories": _top(m),
+        }
+        for m, d in sorted(buckets.items())
+    ]
+    dates = [t["date"] for t in ledger]
+    return {
+        "total_transactions": len(ledger),
+        "monthly_breakdown": monthly,
+        "income_includes_unreviewed": has_unreviewed,
+        "date_range": {
+            "from": str(min(dates)) if dates else None,
+            "to": str(max(dates)) if dates else None,
+        },
+    }
+
+
 # Uncategorized-data thresholds — mirror app/routers/categories.py; keep in sync.
 _UNCAT_COUNT_THRESHOLD = 0.10   # >10% of spending transactions
 _UNCAT_SPEND_THRESHOLD = 0.15   # >15% of spend dollars

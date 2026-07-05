@@ -103,6 +103,14 @@ def confirm_income(
     return {"updated": updated}
 
 
+@router.get("/summary")
+def get_ledger_summary(session: Session = Depends(get_session)):
+    """Whole-ledger spending-by-category-per-month dashboard across all imports
+    (the "View import" tab). Same math as the chat tools."""
+    from ..services.analytics import monthly_summary
+    return monthly_summary(session)
+
+
 @router.get("/income/review-status")
 def income_review_status(session: Session = Depends(get_session)):
     """Whether any auto-detected income is still unreviewed (skipped or not yet

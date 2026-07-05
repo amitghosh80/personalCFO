@@ -155,6 +155,15 @@ export interface ImportSummary {
   date_range: { from: string | null; to: string | null };
 }
 
+// Whole-ledger summary (the "View import" dashboard): same monthly shape as an
+// import summary, aggregated across every import.
+export interface LedgerSummary {
+  total_transactions: number;
+  monthly_breakdown: MonthlyRow[];
+  income_includes_unreviewed: boolean;
+  date_range: { from: string | null; to: string | null };
+}
+
 export type ChatRole = "user" | "assistant";
 
 export interface ChatMessage {

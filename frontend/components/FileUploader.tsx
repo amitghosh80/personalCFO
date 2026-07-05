@@ -228,7 +228,7 @@ export default function FileUploader() {
             month-by-month totals.
           </p>
           <button
-            onClick={() => router.push(`/import/${existingJobId}/summary`)}
+            onClick={() => router.push("/summary")}
             className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
           >
             View import →
