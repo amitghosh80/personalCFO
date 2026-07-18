@@ -136,9 +136,6 @@ def get_import_summary(job_id: str, session: Session = Depends(get_session)):
     from collections import defaultdict
     from ..services.expense_categorizer import CATEGORY_DISPLAY, is_spending
 
-    # How many expense categories to surface per month
-    TOP_N_CATEGORIES = 5
-
     job = _require_job(session, job_id)
     txns = session.exec(
         select(Transaction).where(Transaction.import_job_id == job_id)
@@ -170,6 +167,7 @@ def get_import_summary(job_id: str, session: Session = Depends(get_session)):
                 has_unreviewed = True
 
     def _top_categories(month: str) -> list[dict]:
+        # Ranked descending, not truncated — the frontend decides how many to show.
         ranked = sorted(cat_buckets[month].items(), key=lambda kv: kv[1], reverse=True)
         return [
             {
@@ -177,7 +175,7 @@ def get_import_summary(job_id: str, session: Session = Depends(get_session)):
                 "display": CATEGORY_DISPLAY.get(cat, cat.title()),
                 "amount": round(amount, 2),
             }
-            for cat, amount in ranked[:TOP_N_CATEGORIES]
+            for cat, amount in ranked
         ]
 
     monthly_breakdown = [

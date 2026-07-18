@@ -23,7 +23,7 @@ from ..services.expense_categorizer import (
 # ─── Transfer detection (moved from insight_engine for shared use) ────────────
 
 _TRANSFER_RE = re.compile(
-    r"transfer|zelle|wire|ach\s+(deposit|debit|credit)|"
+    r"transfer|zelle|wire|"
     r"ext\s+trnsf|from\s+checking|to\s+savings|jpmorgan\s+chase\s+ext",
     re.IGNORECASE,
 )
@@ -93,7 +93,6 @@ def monthly_summary(session: Session) -> dict:
     import. Uses the same load_ledger + is_spending_txn math as the chat tools,
     so the "View import" dashboard and the chatbot never disagree. Shape mirrors
     the per-job import summary's monthly_breakdown."""
-    TOP_N = 5
     ledger = load_ledger(session)
     buckets: dict[str, dict] = defaultdict(lambda: {"income": 0.0, "expenses": 0.0})
     cat_buckets: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
@@ -114,10 +113,11 @@ def monthly_summary(session: Session) -> dict:
                 has_unreviewed = True
 
     def _top(month: str) -> list[dict]:
+        # Ranked descending, not truncated — the frontend decides how many to show.
         ranked = sorted(cat_buckets[month].items(), key=lambda kv: kv[1], reverse=True)
         return [
             {"category": c, "display": primary_display(c), "amount": round(a, 2)}
-            for c, a in ranked[:TOP_N]
+            for c, a in ranked
         ]
 
     monthly = [

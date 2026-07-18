@@ -23,6 +23,14 @@ imported accounts...".
 - "Spending" excludes money movement (transfers, credit-card payments, \
 investments). Use spending_by_category for spending questions and cashflow_summary \
 for money-in-vs-out questions.
+- For questions about "subscriptions" specifically, use search_transactions or \
+spending_by_category with primary="subscriptions" — the app's own subscription \
+category — so the answer reflects what's actually tagged as a subscription. Do \
+NOT use recurring_charges for this: it detects statistically-recurring merchants \
+across every category (loan installments, rent, utilities included) and is not \
+scoped to the subscriptions category, so it will surface non-subscription bills. \
+Reserve recurring_charges for when the user explicitly asks to find recurring or \
+hidden/undetected charges across all spending.
 - The imported data only covers the date range stated above. If a question uses a \
 relative period ("last month", "this month", "this year") that falls partly or \
 wholly outside that range, do not just report $0 — say the requested period is \

@@ -1,8 +1,40 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { getObservations, getStarterQuestions, sendChatMessage } from "@/lib/api";
 import type { ChatMessage, ChatToolUse, DataCoverage, Observation } from "@/lib/types";
+
+function AnswerMarkdown({ content }: { content: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+        ul: ({ children }) => <ul className="list-disc pl-5 mb-2 last:mb-0">{children}</ul>,
+        ol: ({ children }) => <ol className="list-decimal pl-5 mb-2 last:mb-0">{children}</ol>,
+        table: ({ children }) => (
+          <div className="overflow-x-auto my-2 rounded-lg border border-gray-200">
+            <table className="w-full text-sm border-collapse">{children}</table>
+          </div>
+        ),
+        thead: ({ children }) => <thead className="bg-gray-50">{children}</thead>,
+        th: ({ children }) => (
+          <th className="text-left px-3 py-1.5 font-medium text-gray-500 border-b border-gray-200">
+            {children}
+          </th>
+        ),
+        td: ({ children }) => <td className="px-3 py-1.5 border-b border-gray-100">{children}</td>,
+        code: ({ children }) => (
+          <code className="bg-gray-200/70 rounded px-1 py-0.5 text-xs">{children}</code>
+        ),
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
+}
 
 interface DisplayMessage extends ChatMessage {
   tools?: ChatToolUse[];
@@ -78,11 +110,11 @@ export default function ChatInterface({ jobId }: { jobId?: string }) {
         {messages.map((m, i) => (
           <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
             <div
-              className={`inline-block rounded-lg px-3 py-2 max-w-[85%] whitespace-pre-wrap text-sm ${
-                m.role === "user" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-800"
+              className={`inline-block rounded-lg px-3 py-2 max-w-[85%] text-sm ${
+                m.role === "user" ? "bg-blue-600 text-white whitespace-pre-wrap" : "bg-gray-100 text-gray-800"
               }`}
             >
-              {m.content}
+              {m.role === "assistant" ? <AnswerMarkdown content={m.content} /> : m.content}
             </div>
             {m.tools && m.tools.length > 0 && (
               <div className="text-[11px] text-gray-400 mt-1">

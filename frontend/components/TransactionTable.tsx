@@ -74,12 +74,29 @@ function Badge({ label, color }: { label: string; color: string }) {
   );
 }
 
-export default function TransactionTable({ jobId }: { jobId?: string }) {
+function monthLabel(yyyyMm: string) {
+  const [y, m] = yyyyMm.split("-").map(Number);
+  return new Date(y, m - 1).toLocaleString("en-US", { month: "short", year: "numeric" });
+}
+
+export default function TransactionTable({
+  jobId,
+  initialCategory,
+  initialMonth,
+  initialType,
+}: {
+  jobId?: string;
+  initialCategory?: string;
+  initialMonth?: string;
+  initialType?: "debit" | "credit";
+}) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"all" | "debit" | "credit">("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "debit" | "credit">(initialType ?? "all");
+  const [categoryFilter, setCategoryFilter] = useState<string>(initialCategory ?? "");
+  const [monthFilter, setMonthFilter] = useState<string>(initialMonth ?? "");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
   const [taxonomy, setTaxonomy] = useState<TaxonomyPrimary[]>([]);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -104,9 +121,39 @@ export default function TransactionTable({ jobId }: { jobId?: string }) {
     setEditingId(null);
   }
 
+  // Expense categories present in the data, for the category dropdown.
+  const categoryOptions = useMemo(() => {
+    const present = new Set<string>();
+    transactions.forEach((t) => {
+      if (t.transaction_type === "debit" && t.expense_category) present.add(t.expense_category);
+    });
+    return [...present].sort((a, b) =>
+      (EXPENSE_LABELS[a] ?? a).localeCompare(EXPENSE_LABELS[b] ?? b)
+    );
+  }, [transactions]);
+
+  // Months present in the data (YYYY-MM), newest first.
+  const monthOptions = useMemo(() => {
+    const present = new Set<string>();
+    transactions.forEach((t) => present.add(t.date.slice(0, 7)));
+    return [...present].sort().reverse();
+  }, [transactions]);
+
+  const hasFilters =
+    !!search.trim() || typeFilter !== "all" || !!categoryFilter || !!monthFilter;
+
+  const clearFilters = () => {
+    setSearch("");
+    setTypeFilter("all");
+    setCategoryFilter("");
+    setMonthFilter("");
+  };
+
   const filtered = useMemo(() => {
     let rows = transactions;
     if (typeFilter !== "all") rows = rows.filter((t) => t.transaction_type === typeFilter);
+    if (categoryFilter) rows = rows.filter((t) => t.expense_category === categoryFilter);
+    if (monthFilter) rows = rows.filter((t) => t.date.slice(0, 7) === monthFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
       rows = rows.filter(
@@ -119,7 +166,12 @@ export default function TransactionTable({ jobId }: { jobId?: string }) {
       const d = a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
       return sortDir === "desc" ? -d : d;
     });
-  }, [transactions, typeFilter, search, sortDir]);
+  }, [transactions, typeFilter, categoryFilter, monthFilter, search, sortDir]);
+
+  const filteredTotal = useMemo(
+    () => filtered.reduce((sum, t) => sum + (t.transaction_type === "credit" ? t.amount : -t.amount), 0),
+    [filtered]
+  );
 
   if (loading) return <div className="text-gray-500">Loading transactions…</div>;
   if (error) return <div className="text-red-600">{error}</div>;
@@ -132,6 +184,15 @@ export default function TransactionTable({ jobId }: { jobId?: string }) {
           <h2 className="text-2xl font-bold text-gray-900">Transactions</h2>
           <p className="text-gray-400 text-sm mt-0.5">
             {filtered.length} of {transactions.length} shown
+            {filtered.length > 0 && (
+              <>
+                {" · "}
+                <span className={`font-medium ${filteredTotal >= 0 ? "text-green-700" : "text-red-600"}`}>
+                  Total: {filteredTotal >= 0 ? "+" : "−"}$
+                  {Math.abs(filteredTotal).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                </span>
+              </>
+            )}
           </p>
         </div>
         <a href="/app" className="text-sm text-blue-600 hover:underline">+ Import more</a>
@@ -145,6 +206,30 @@ export default function TransactionTable({ jobId }: { jobId?: string }) {
           onChange={(e) => setSearch(e.target.value)}
           className="flex-1 min-w-48 px-4 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
+        <select
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white"
+        >
+          <option value="">All categories</option>
+          {categoryOptions.map((c) => (
+            <option key={c} value={c}>
+              {EXPENSE_LABELS[c] ?? c}
+            </option>
+          ))}
+        </select>
+        <select
+          value={monthFilter}
+          onChange={(e) => setMonthFilter(e.target.value)}
+          className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white"
+        >
+          <option value="">All months</option>
+          {monthOptions.map((m) => (
+            <option key={m} value={m}>
+              {monthLabel(m)}
+            </option>
+          ))}
+        </select>
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value as typeof typeFilter)}
@@ -160,6 +245,14 @@ export default function TransactionTable({ jobId }: { jobId?: string }) {
         >
           Date {sortDir === "desc" ? "↓" : "↑"}
         </button>
+        {hasFilters && (
+          <button
+            onClick={clearFilters}
+            className="px-3 py-2 text-sm text-gray-500 hover:text-gray-800"
+          >
+            Clear filters
+          </button>
+        )}
       </div>
 
       {filtered.length === 0 ? (
