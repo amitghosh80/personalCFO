@@ -144,12 +144,22 @@ export interface MerchantRule {
   match_count: number;
 }
 
+export interface IncomeCategoryBreakdown {
+  category: IncomeCategory | string;
+  display: string;
+  amount: number;
+  count: number;
+}
+
 export interface ImportSummary {
   import_job_id: string;
   status: string;
   total_transactions: number;
   monthly_breakdown: MonthlyRow[];
   income_includes_unreviewed: boolean;
+  total_income: number;
+  income_by_category: IncomeCategoryBreakdown[];
+  income_date_range: { from: string | null; to: string | null };
   duplicate_count: number;
   ambiguous_count: number;
   date_range: { from: string | null; to: string | null };

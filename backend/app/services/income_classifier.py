@@ -1,6 +1,16 @@
 import re
 from ..models.transaction import IncomeCategory, TransactionType
 
+# Mirrors the labels already shown in the income review UI (IncomeReview.tsx).
+INCOME_DISPLAY: dict[str, str] = {
+    IncomeCategory.salary.value: "Salary / Payroll",
+    IncomeCategory.freelance.value: "Freelance / Contract",
+    IncomeCategory.interest.value: "Interest / Dividend",
+    IncomeCategory.rental.value: "Rental Income",
+    IncomeCategory.gig.value: "Gig / Platform",
+    IncomeCategory.other.value: "Other Income",
+}
+
 # Patterns that disqualify a credit from being income
 _NOT_INCOME = [
     # Inter-account transfers

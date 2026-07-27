@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getImportSummary } from "@/lib/api";
 import StepNav from "@/components/StepNav";
-import MonthlyBreakdown from "@/components/MonthlyBreakdown";
+import MonthlyBreakdown, { fmt } from "@/components/MonthlyBreakdown";
 import type { ImportSummary as ImportSummaryType } from "@/lib/types";
 
 export default function ImportSummary({ jobId }: { jobId: string }) {
@@ -43,6 +43,33 @@ export default function ImportSummary({ jobId }: { jobId: string }) {
           emptyMessage="No transactions found for this import."
         />
       </div>
+
+      {/* Income summary — same figures the chatbot's income_summary tool returns */}
+      {summary.income_by_category.length > 0 && (
+        <div className="mb-6 rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-baseline justify-between">
+            <h3 className="font-medium text-gray-700">Income Summary</h3>
+            <span className="text-sm tabular-nums text-green-700 font-semibold">
+              {fmt(summary.total_income)}
+              {summary.income_date_range.from && summary.income_date_range.to && (
+                <span className="text-xs text-gray-400 font-normal ml-2">
+                  {summary.income_date_range.from} → {summary.income_date_range.to}
+                </span>
+              )}
+            </span>
+          </div>
+          <div className="divide-y divide-gray-100 bg-white">
+            {summary.income_by_category.map((c) => (
+              <div key={c.category} className="px-5 py-2.5 flex items-center justify-between text-sm">
+                <span className="text-gray-600">
+                  {c.display} <span className="text-gray-400">({c.count})</span>
+                </span>
+                <span className="tabular-nums text-gray-700">{fmt(c.amount)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Footnote when income includes unreviewed candidates */}
       {summary.income_includes_unreviewed && (

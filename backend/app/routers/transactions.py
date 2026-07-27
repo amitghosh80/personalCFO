@@ -155,6 +155,7 @@ def get_import_summary(
 ):
     from collections import defaultdict
     from ..services.expense_categorizer import CATEGORY_DISPLAY, is_spending
+    from ..services.income_classifier import INCOME_DISPLAY
 
     job = _require_job(session, current_user.id, job_id)
     txns = session.exec(
@@ -167,7 +168,10 @@ def get_import_summary(
     buckets: dict[str, dict] = defaultdict(lambda: {"income": 0.0, "expenses": 0.0})
     # month -> category -> total spent
     cat_buckets: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    # income category -> {amount, count}, same shape as the chatbot's income_summary tool
+    income_by_cat: dict[str, dict] = defaultdict(lambda: {"amount": 0.0, "count": 0})
     has_unreviewed = False
+    income_dates: list = []
 
     for t in txns:
         key = t.date.strftime("%Y-%m")
@@ -182,11 +186,16 @@ def get_import_summary(
             cat_buckets[key][cat] += t.amount
         elif t.transaction_type == TransactionType.credit:
             # Confirmed income, or auto-detected candidate not yet reviewed
-            if t.income_confirmed is True:
-                buckets[key]["income"] += t.amount
-            elif t.is_income_candidate and t.income_confirmed is None:
-                buckets[key]["income"] += t.amount
+            is_income = t.income_confirmed is True or (t.is_income_candidate and t.income_confirmed is None)
+            if not is_income:
+                continue
+            buckets[key]["income"] += t.amount
+            if t.income_confirmed is None:
                 has_unreviewed = True
+            income_cat = t.income_category or "other"
+            income_by_cat[income_cat]["amount"] += t.amount
+            income_by_cat[income_cat]["count"] += 1
+            income_dates.append(t.date)
 
     def _top_categories(month: str) -> list[dict]:
         # Ranked descending, not truncated — the frontend decides how many to show.
@@ -211,12 +220,28 @@ def get_import_summary(
         for month, data in sorted(buckets.items())
     ]
 
+    income_by_category = [
+        {
+            "category": cat,
+            "display": INCOME_DISPLAY.get(cat, cat.title()),
+            "amount": round(v["amount"], 2),
+            "count": v["count"],
+        }
+        for cat, v in sorted(income_by_cat.items(), key=lambda kv: kv[1]["amount"], reverse=True)
+    ]
+
     return {
         "import_job_id": job_id,
         "status": job.status,
         "total_transactions": len(txns),
         "monthly_breakdown": monthly_breakdown,
         "income_includes_unreviewed": has_unreviewed,
+        "total_income": round(sum(v["amount"] for v in income_by_cat.values()), 2),
+        "income_by_category": income_by_category,
+        "income_date_range": {
+            "from": str(min(income_dates)) if income_dates else None,
+            "to": str(max(income_dates)) if income_dates else None,
+        },
         "duplicate_count": sum(1 for t in txns if t.is_duplicate),
         "ambiguous_count": sum(1 for t in txns if t.is_ambiguous),
         "date_range": {
