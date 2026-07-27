@@ -10,6 +10,7 @@ import type {
   UncategorizedRow,
   UploadResult,
 } from "./types";
+import { clearToken, getToken } from "./auth";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -21,15 +22,67 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// Attaches the bearer token to every request and bounces to /login on 401
+// (expired/invalid session) so a stale token never renders a blank/broken page.
+async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const token = getToken();
+  const headers = new Headers(options.headers);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const res = await fetch(`${API}${path}`, { ...options, headers });
+  if (res.status === 401 && typeof window !== "undefined") {
+    clearToken();
+    if (window.location.pathname !== "/login") {
+      window.location.href = "/login";
+    }
+  }
+  return res;
+}
+
+// ─── Auth ───────────────────────────────────────────────────────────────────
+
+export interface AuthUser {
+  id: number;
+  email: string;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: string;
+  user: AuthUser;
+}
+
+export async function signup(email: string, password: string): Promise<AuthResponse> {
+  const res = await fetch(`${API}/api/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  return handleResponse<AuthResponse>(res);
+}
+
+export async function login(email: string, password: string): Promise<AuthResponse> {
+  const res = await fetch(`${API}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  return handleResponse<AuthResponse>(res);
+}
+
+export async function getMe(): Promise<AuthUser> {
+  const res = await apiFetch("/api/auth/me");
+  return handleResponse<AuthUser>(res);
+}
+
 export async function uploadStatements(files: File[]): Promise<UploadResult> {
   const form = new FormData();
   files.forEach((f) => form.append("files", f));
-  const res = await fetch(`${API}/api/upload`, { method: "POST", body: form });
+  const res = await apiFetch("/api/upload", { method: "POST", body: form });
   return handleResponse<UploadResult>(res);
 }
 
 export async function getIncomeReview(jobId: string): Promise<Transaction[]> {
-  const res = await fetch(`${API}/api/import/${jobId}/income-review`);
+  const res = await apiFetch(`/api/import/${jobId}/income-review`);
   return handleResponse<Transaction[]>(res);
 }
 
@@ -39,7 +92,7 @@ export async function confirmIncome(
   confirmed: boolean,
   incomeCategory?: string
 ): Promise<{ updated: number }> {
-  const res = await fetch(`${API}/api/import/${jobId}/income-review`, {
+  const res = await apiFetch(`/api/import/${jobId}/income-review`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -52,12 +105,12 @@ export async function confirmIncome(
 }
 
 export async function getImportSummary(jobId: string): Promise<ImportSummary> {
-  const res = await fetch(`${API}/api/import/${jobId}/summary`);
+  const res = await apiFetch(`/api/import/${jobId}/summary`);
   return handleResponse<ImportSummary>(res);
 }
 
 export async function getLedgerSummary(): Promise<import("./types").LedgerSummary> {
-  const res = await fetch(`${API}/api/summary`);
+  const res = await apiFetch("/api/summary");
   return handleResponse<import("./types").LedgerSummary>(res);
 }
 
@@ -68,14 +121,14 @@ export interface IncomeReviewStatus {
 }
 
 export async function getIncomeReviewStatus(): Promise<IncomeReviewStatus> {
-  const res = await fetch(`${API}/api/income/review-status`);
+  const res = await apiFetch("/api/income/review-status");
   return handleResponse<IncomeReviewStatus>(res);
 }
 
 // ─── Categorization (F3) ──────────────────────────────────────────────────────
 
 export async function getTaxonomy(): Promise<TaxonomyResponse> {
-  const res = await fetch(`${API}/api/categories/taxonomy`);
+  const res = await apiFetch("/api/categories/taxonomy");
   return handleResponse<TaxonomyResponse>(res);
 }
 
@@ -85,7 +138,7 @@ export async function updateCategory(
   subcategory: string,
   createRule = false
 ): Promise<{ updated: number; rule_created: boolean }> {
-  const res = await fetch(`${API}/api/categories/transaction/${txnId}`, {
+  const res = await apiFetch(`/api/categories/transaction/${txnId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ primary, subcategory, create_rule: createRule }),
@@ -99,7 +152,7 @@ export async function bulkUpdateCategory(
   subcategory: string,
   createRule = false
 ): Promise<{ updated: number; rule_created: boolean }> {
-  const res = await fetch(`${API}/api/categories/bulk`, {
+  const res = await apiFetch("/api/categories/bulk", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ transaction_ids: transactionIds, primary, subcategory, create_rule: createRule }),
@@ -109,35 +162,35 @@ export async function bulkUpdateCategory(
 
 export async function getUncategorized(jobId?: string): Promise<UncategorizedRow[]> {
   const url = jobId
-    ? `${API}/api/categories/uncategorized?import_job_id=${jobId}`
-    : `${API}/api/categories/uncategorized`;
-  const res = await fetch(url);
+    ? `/api/categories/uncategorized?import_job_id=${jobId}`
+    : "/api/categories/uncategorized";
+  const res = await apiFetch(url);
   return handleResponse<UncategorizedRow[]>(res);
 }
 
 export async function getUncategorizedAlert(jobId?: string): Promise<UncategorizedAlert> {
   const url = jobId
-    ? `${API}/api/categories/uncategorized/alert?import_job_id=${jobId}`
-    : `${API}/api/categories/uncategorized/alert`;
-  const res = await fetch(url);
+    ? `/api/categories/uncategorized/alert?import_job_id=${jobId}`
+    : "/api/categories/uncategorized/alert";
+  const res = await apiFetch(url);
   return handleResponse<UncategorizedAlert>(res);
 }
 
 export async function listRules(): Promise<MerchantRule[]> {
-  const res = await fetch(`${API}/api/categories/rules`);
+  const res = await apiFetch("/api/categories/rules");
   return handleResponse<MerchantRule[]>(res);
 }
 
 export async function deleteRule(ruleId: number): Promise<{ deleted: number }> {
-  const res = await fetch(`${API}/api/categories/rules/${ruleId}`, { method: "DELETE" });
+  const res = await apiFetch(`/api/categories/rules/${ruleId}`, { method: "DELETE" });
   return handleResponse(res);
 }
 
 export async function getTransactions(jobId?: string): Promise<Transaction[]> {
   const url = jobId
-    ? `${API}/api/transactions?import_job_id=${jobId}`
-    : `${API}/api/transactions`;
-  const res = await fetch(url);
+    ? `/api/transactions?import_job_id=${jobId}`
+    : "/api/transactions";
+  const res = await apiFetch(url);
   return handleResponse<Transaction[]>(res);
 }
 
@@ -145,7 +198,7 @@ export async function sendChatMessage(
   question: string,
   history: ChatMessage[]
 ): Promise<ChatResponse> {
-  const res = await fetch(`${API}/api/chat`, {
+  const res = await apiFetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ question, history }),
@@ -154,13 +207,13 @@ export async function sendChatMessage(
 }
 
 export async function getStarterQuestions(): Promise<string[]> {
-  const res = await fetch(`${API}/api/chat/starters`);
+  const res = await apiFetch("/api/chat/starters");
   const body = await handleResponse<{ questions: string[] }>(res);
   return body.questions;
 }
 
 export async function getObservations(jobId: string): Promise<Observation[]> {
-  const res = await fetch(`${API}/api/import/${jobId}/observations`);
+  const res = await apiFetch(`/api/import/${jobId}/observations`);
   const body = await handleResponse<{ observations: Observation[] }>(res);
   return body.observations;
 }

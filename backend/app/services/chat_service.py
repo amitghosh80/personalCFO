@@ -45,10 +45,10 @@ caveat (e.g. "based on auto-categorization").
 Be concise and use plain dollar figures."""
 
 
-def _coverage_line(session: Session) -> str:
+def _coverage_line(session: Session, user_id: int) -> str:
     """One-line description of the imported data window for the system prompt, so
     the model never answers a relative-period question against data it can't see."""
-    cov = data_coverage(session)
+    cov = data_coverage(session, user_id)
     dr = cov.get("date_range")
     if not dr:
         return "No transactions have been imported yet."
@@ -73,6 +73,7 @@ def _build_client():
 
 def answer_question(
     session: Session,
+    user_id: int,
     question: str,
     history: list[dict] | None = None,
     *,
@@ -92,7 +93,7 @@ def answer_question(
     effective_today = today or date.today()
     system = (
         f"Today's date is {effective_today.isoformat()}.\n"
-        f"{_coverage_line(session)}\n\n{SYSTEM_PROMPT}"
+        f"{_coverage_line(session, user_id)}\n\n{SYSTEM_PROMPT}"
     )
 
     messages = list(history or []) + [{"role": "user", "content": question}]
@@ -106,7 +107,7 @@ def answer_question(
             t["name"] in ("spending_by_category", "cashflow_summary") for t in tools_used
         )
         if not suppress_data_warning and used_spending_tool:
-            st = uncategorized_status(session)
+            st = uncategorized_status(session, user_id)
             if st["over"]:
                 pct = round(st["pct_count"] * 100)
                 warn = (
@@ -150,7 +151,7 @@ def answer_question(
         tool_results = []
         for tu in tool_uses:
             tools_used.append({"name": tu.name, "input": tu.input})
-            result = dispatch_tool(session, tu.name, tu.input, today=effective_today)
+            result = dispatch_tool(session, user_id, tu.name, tu.input, today=effective_today)
             tool_results.append({
                 "type": "tool_result",
                 "tool_use_id": tu.id,

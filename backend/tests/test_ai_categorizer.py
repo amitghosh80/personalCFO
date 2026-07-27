@@ -10,6 +10,7 @@ from app.models.transaction import Transaction, TransactionType
 from app.services import ai_categorizer
 from app.services.ai_categorizer import categorize_job, normalize_merchant, confidence_label
 from app.services.encryption import encrypt
+from tests.conftest import TEST_USER_ID
 
 
 def _engine():
@@ -20,6 +21,7 @@ def _engine():
 
 def _fallback_debit(session, desc, amount=50.0, job="j1"):
     t = Transaction(
+        user_id=TEST_USER_ID,
         import_job_id=job, date=date(2026, 5, 1), description=encrypt(desc),
         amount=amount, transaction_type=TransactionType.debit, source_file_hash="h",
         expense_category="other", expense_subcategory="other", category_source="fallback",
@@ -68,7 +70,7 @@ def test_ai_categorizes_and_caches():
         client = FakeClient([{"merchant": key, "primary": "food_and_drink",
                               "subcategory": "coffee", "confidence": 0.93}])
 
-        summary = categorize_job(session, "j1", client=client, model="m")
+        summary = categorize_job(session, TEST_USER_ID, "j1", client=client, model="m")
         session.refresh(t)
 
         assert summary["resolved_by_ai"] == 1
@@ -88,7 +90,7 @@ def test_offtaxonomy_response_falls_back_to_other():
         key = normalize_merchant("MYSTERY VENDOR")
         client = FakeClient([{"merchant": key, "primary": "crypto",
                               "subcategory": "nonsense", "confidence": 0.99}])
-        categorize_job(session, "j1", client=client, model="m")
+        categorize_job(session, TEST_USER_ID, "j1", client=client, model="m")
         session.refresh(t)
         assert t.expense_category == "other"
         assert t.confidence_label == "low"
@@ -105,7 +107,7 @@ def test_cache_hit_skips_model():
         t2 = _fallback_debit(session, "NETFLIX")
 
         client = FakeClient([])  # would error if called with items, but cache should win for t2
-        summary = categorize_job(session, "j1", client=client, model="m")
+        summary = categorize_job(session, TEST_USER_ID, "j1", client=client, model="m")
         session.refresh(t2)
         assert t2.expense_category == "subscriptions"
         assert summary["resolved_by_cache"] >= 1
@@ -114,12 +116,12 @@ def test_cache_hit_skips_model():
 def test_user_rule_takes_priority():
     eng = _engine()
     with Session(eng) as session:
-        session.add(MerchantRule(merchant_pattern="WHOLEFDS", primary="food_and_drink",
+        session.add(MerchantRule(user_id=TEST_USER_ID, merchant_pattern="WHOLEFDS", primary="food_and_drink",
                                  subcategory="groceries"))
         session.commit()
         t = _fallback_debit(session, "WHOLEFDS MARKET #1")
         client = FakeClient([])
-        summary = categorize_job(session, "j1", client=client, model="m")
+        summary = categorize_job(session, TEST_USER_ID, "j1", client=client, model="m")
         session.refresh(t)
         assert t.category_source == "user"
         assert t.expense_category == "food_and_drink"
@@ -131,7 +133,7 @@ def test_no_client_leaves_low_confidence():
     with Session(eng) as session:
         t = _fallback_debit(session, "OBSCURE LOCAL SHOP")
         # No client and no API key configured in tests → graceful skip.
-        summary = categorize_job(session, "j1", client=None, model="m")
+        summary = categorize_job(session, TEST_USER_ID, "j1", client=None, model="m")
         session.refresh(t)
         assert t.confidence_label == "low"
         assert summary["uncategorized"] >= 1

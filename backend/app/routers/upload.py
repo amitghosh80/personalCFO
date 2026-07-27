@@ -6,8 +6,10 @@ from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile,
 from sqlmodel import Session
 
 from ..database import get_session, get_engine
+from ..dependencies import get_current_user
 from ..models.import_job import ImportJob, ImportStatus
 from ..models.transaction import Transaction, TransactionType
+from ..models.user import User
 from ..parsers.csv_parser import parse_csv
 from ..parsers.pdf_parser import parse_pdf
 from ..services.duplicate_detector import (
@@ -35,7 +37,7 @@ def _date_range(transactions: list[dict]) -> dict:
     return {"from": str(min(dates)), "to": str(max(dates))}
 
 
-def _run_ai_categorization(job_id: str) -> None:
+def _run_ai_categorization(user_id: int, job_id: str) -> None:
     """Background worker: AI-categorize a job's fallback rows in a fresh session.
 
     Runs after the upload response is returned so income review (F2) is available
@@ -43,7 +45,7 @@ def _run_ai_categorization(job_id: str) -> None:
     from ..services.ai_categorizer import categorize_job
     with Session(get_engine()) as session:
         try:
-            categorize_job(session, job_id)
+            categorize_job(session, user_id, job_id)
         except Exception:
             pass  # never crash the worker; rows stay in the uncategorized queue
 
@@ -53,12 +55,13 @@ async def upload_statements(
     background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
     session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
     settings = get_settings()
     max_bytes = settings.max_upload_size_mb * 1024 * 1024
 
     job_id = str(uuid.uuid4())
-    job = ImportJob(id=job_id, file_count=len(files), status=ImportStatus.processing)
+    job = ImportJob(id=job_id, user_id=current_user.id, file_count=len(files), status=ImportStatus.processing)
     session.add(job)
     session.flush()
 
@@ -89,8 +92,8 @@ async def upload_statements(
         # Skip a file whose exact content was already imported. is_duplicate()
         # only flags identical rows from a *different* hash, so without this a
         # same-file re-upload would duplicate the whole statement.
-        if file_already_imported(session, file_hash):
-            existing = existing_job_for_file(session, file_hash)
+        if file_already_imported(session, current_user.id, file_hash):
+            existing = existing_job_for_file(session, current_user.id, file_hash)
             file_results.append({
                 "file": upload.filename,
                 "error": "Already imported — skipped to avoid duplicates",
@@ -117,6 +120,7 @@ async def upload_statements(
             )
             is_dup = is_duplicate(
                 session,
+                current_user.id,
                 txn_data["date"],
                 txn_data["amount"],
                 txn_data["transaction_type"],
@@ -140,6 +144,7 @@ async def upload_statements(
                     exp_conf, exp_label = None, None
 
             txn = Transaction(
+                user_id=current_user.id,
                 import_job_id=job_id,
                 date=txn_data["date"],
                 description=encrypt(txn_data["description"]),
@@ -192,7 +197,7 @@ async def upload_statements(
     session.commit()
 
     # AI categorization of the long tail runs after the response is sent.
-    background_tasks.add_task(_run_ai_categorization, job_id)
+    background_tasks.add_task(_run_ai_categorization, current_user.id, job_id)
 
     return {
         "import_job_id": job_id,

@@ -7,14 +7,17 @@ what inflated askCFO's whole-ledger totals vs the per-job categorization view.
 """
 import hashlib
 from datetime import date
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.database import get_session
+from app.dependencies import get_current_user
 from app.models.transaction import Transaction, TransactionType
 from app.services.encryption import encrypt
 from app.services.duplicate_detector import file_already_imported
+from tests.conftest import TEST_USER_ID
 
 
 def _override(session):
@@ -25,17 +28,19 @@ def _override(session):
 
 def _client(session):
     app.dependency_overrides[get_session] = _override(session)
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=TEST_USER_ID)
     return TestClient(app)
 
 
 def test_file_already_imported_detects_existing_hash(session):
     session.add(Transaction(
+        user_id=TEST_USER_ID,
         import_job_id="j1", date=date(2026, 4, 1), description=encrypt("X"),
         amount=10.0, transaction_type=TransactionType.debit, source_file_hash="abc123",
     ))
     session.commit()
-    assert file_already_imported(session, "abc123") is True
-    assert file_already_imported(session, "not-seen-before") is False
+    assert file_already_imported(session, TEST_USER_ID, "abc123") is True
+    assert file_already_imported(session, TEST_USER_ID, "not-seen-before") is False
 
 
 def test_reupload_of_same_file_is_skipped(session):
@@ -43,6 +48,7 @@ def test_reupload_of_same_file_is_skipped(session):
     file_hash = hashlib.sha256(content).hexdigest()
     # Simulate the identical file having been imported earlier.
     session.add(Transaction(
+        user_id=TEST_USER_ID,
         import_job_id="prev", date=date(2026, 4, 1),
         description=encrypt("ALDERWOOD WATER"), amount=276.87,
         transaction_type=TransactionType.debit, source_file_hash=file_hash,

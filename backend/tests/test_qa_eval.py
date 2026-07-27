@@ -13,6 +13,7 @@ import pytest
 from app.config import get_settings
 from app.models.transaction import TransactionType
 from app.services.chat_service import answer_question
+from tests.conftest import TEST_USER_ID
 
 TODAY = date(2026, 6, 6)
 
@@ -36,12 +37,12 @@ def seeded(make_txn):
 
 
 def test_spending_question_is_grounded(seeded):
-    out = answer_question(seeded, "How much did I spend on food in May 2026?", [], today=TODAY)
+    out = answer_question(seeded, TEST_USER_ID, "How much did I spend on food in May 2026?", [], today=TODAY)
     assert any(t["name"] == "spending_by_category" for t in out["tools_used"])
     assert "140" in out["answer"]
 
 
 def test_income_question_is_grounded(seeded):
-    out = answer_question(seeded, "What was my income in May 2026?", [], today=TODAY)
+    out = answer_question(seeded, TEST_USER_ID, "What was my income in May 2026?", [], today=TODAY)
     assert any(t["name"] in ("income_summary", "cashflow_summary") for t in out["tools_used"])
     assert "3,000" in out["answer"] or "3000" in out["answer"]

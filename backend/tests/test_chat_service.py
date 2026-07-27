@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 from app.models.transaction import TransactionType
 from app.services import chat_service
+from tests.conftest import TEST_USER_ID
 
 TODAY = date(2026, 6, 6)
 
@@ -41,7 +42,7 @@ def test_loop_runs_tool_then_returns_grounded_answer(make_txn):
     client = FakeClient(responses)
 
     out = chat_service.answer_question(
-        s, "How much did I spend in May?", [], client=client, model="m", today=TODAY)
+        s, TEST_USER_ID, "How much did I spend in May?", [], client=client, model="m", today=TODAY)
 
     assert "100" in out["answer"]
     assert out["tools_used"] == [{"name": "spending_by_category", "input": {"period": {"month": "2026-05"}}}]
@@ -61,7 +62,7 @@ def test_loop_respects_iteration_cap(make_txn):
     client = FakeClient([always_tool] * 10)
 
     out = chat_service.answer_question(
-        s, "loop forever?", [], client=client, model="m", today=TODAY, max_iterations=3)
+        s, TEST_USER_ID, "loop forever?", [], client=client, model="m", today=TODAY, max_iterations=3)
 
     assert len(client.calls) == 3  # capped
     assert out["answer"]  # returns a graceful message, not an exception
@@ -72,7 +73,7 @@ def test_system_prompt_includes_todays_date(make_txn):
     client = FakeClient([
         SimpleNamespace(stop_reason="end_turn", content=[_text_block("hi")]),
     ])
-    chat_service.answer_question(s, "hello", [], client=client, model="m", today=TODAY)
+    chat_service.answer_question(s, TEST_USER_ID, "hello", [], client=client, model="m", today=TODAY)
     system_arg = client.calls[0]["system"]
     assert "2026-06-06" in system_arg
 
@@ -89,7 +90,7 @@ def test_system_prompt_includes_data_coverage_range(make_txn):
     client = FakeClient([
         SimpleNamespace(stop_reason="end_turn", content=[_text_block("ok")]),
     ])
-    chat_service.answer_question(s, "what did I spend?", [], client=client, model="m", today=TODAY)
+    chat_service.answer_question(s, TEST_USER_ID, "what did I spend?", [], client=client, model="m", today=TODAY)
     system_arg = client.calls[0]["system"]
     assert "2026-02-10" in system_arg
     assert "2026-04-09" not in system_arg  # actual max is 2026-04-05
@@ -102,5 +103,5 @@ def test_system_prompt_handles_empty_ledger(make_txn):
     client = FakeClient([
         SimpleNamespace(stop_reason="end_turn", content=[_text_block("ok")]),
     ])
-    chat_service.answer_question(s, "what did I spend?", [], client=client, model="m", today=TODAY)
+    chat_service.answer_question(s, TEST_USER_ID, "what did I spend?", [], client=client, model="m", today=TODAY)
     assert client.calls[0]["system"]  # built without error

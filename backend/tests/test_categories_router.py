@@ -1,13 +1,16 @@
 """Tests for the category-management endpoints (PRD F3)."""
 from datetime import date
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.database import get_session
+from app.dependencies import get_current_user
 from app.models.merchant_rule import MerchantRule
 from app.models.transaction import Transaction, TransactionType
 from app.services.encryption import encrypt
+from tests.conftest import TEST_USER_ID
 
 
 def _override(session):
@@ -18,11 +21,13 @@ def _override(session):
 
 def _client(session):
     app.dependency_overrides[get_session] = _override(session)
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=TEST_USER_ID)
     return TestClient(app)
 
 
 def _debit(session, desc, amount, **kw):
     t = Transaction(
+        user_id=TEST_USER_ID,
         import_job_id="j1", date=date(2026, 5, 1), description=encrypt(desc),
         amount=amount, transaction_type=TransactionType.debit, source_file_hash="h", **kw,
     )
@@ -127,7 +132,7 @@ def test_uncategorized_alert_trips_on_spend(session):
 
 
 def test_rules_list_and_delete(session):
-    session.add(MerchantRule(merchant_pattern="WHOLEFDS", primary="food_and_drink",
+    session.add(MerchantRule(user_id=TEST_USER_ID, merchant_pattern="WHOLEFDS", primary="food_and_drink",
                              subcategory="groceries"))
     session.commit()
     try:

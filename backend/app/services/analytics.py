@@ -45,10 +45,12 @@ def _norm(desc: str) -> str:
 
 # ─── Ledger loading ───────────────────────────────────────────────────────────
 
-def load_ledger(session: Session) -> list[dict]:
-    """Decrypt and normalize every non-duplicate, non-ambiguous transaction."""
+def load_ledger(session: Session, user_id: int) -> list[dict]:
+    """Decrypt and normalize every non-duplicate, non-ambiguous transaction
+    belonging to the given user."""
     rows = session.exec(
         select(Transaction)
+        .where(Transaction.user_id == user_id)
         .where(Transaction.is_duplicate == False)   # noqa: E712
         .where(Transaction.is_ambiguous == False)    # noqa: E712
         .order_by(Transaction.date)
@@ -88,12 +90,12 @@ def _in_range(t: dict, start: date, end: date) -> bool:
     return start <= t["date"] <= end
 
 
-def monthly_summary(session: Session) -> dict:
+def monthly_summary(session: Session, user_id: int) -> dict:
     """Whole-ledger dashboard: spending by category, per month, across every
     import. Uses the same load_ledger + is_spending_txn math as the chat tools,
     so the "View import" dashboard and the chatbot never disagree. Shape mirrors
     the per-job import summary's monthly_breakdown."""
-    ledger = load_ledger(session)
+    ledger = load_ledger(session, user_id)
     buckets: dict[str, dict] = defaultdict(lambda: {"income": 0.0, "expenses": 0.0})
     cat_buckets: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
     has_unreviewed = False
@@ -147,12 +149,13 @@ _UNCAT_COUNT_THRESHOLD = 0.10   # >10% of spending transactions
 _UNCAT_SPEND_THRESHOLD = 0.15   # >15% of spend dollars
 
 
-def uncategorized_status(session: Session) -> dict:
+def uncategorized_status(session: Session, user_id: int) -> dict:
     """How much spending is still uncategorized and whether it exceeds the alert
     thresholds. Gates the chatbot from surfacing spending insights on data that is
     too incompletely categorized to trust (PRD F3 / AMI-33)."""
     rows = session.exec(
         select(Transaction)
+        .where(Transaction.user_id == user_id)
         .where(Transaction.transaction_type == TransactionType.debit)
         .where(Transaction.is_duplicate == False)  # noqa: E712
     ).all()
@@ -342,6 +345,7 @@ def resolve_period(period: "dict | str | None", today: date | None = None) -> tu
 
 def spending_by_category(
     session: Session,
+    user_id: int,
     period: dict | None = None,
     primary: str | None = None,
     today: date | None = None,
@@ -352,7 +356,7 @@ def spending_by_category(
     'how much did I spend' is never inflated by offsetting transactions.
     """
     start, end, label = resolve_period(period, today)
-    txns = [t for t in load_ledger(session) if _in_range(t, start, end) and is_spending_txn(t)]
+    txns = [t for t in load_ledger(session, user_id) if _in_range(t, start, end) and is_spending_txn(t)]
     if primary:
         txns = [t for t in txns if t["expense_category"] == primary]
 
@@ -387,12 +391,12 @@ def spending_by_category(
     }
 
 
-def cashflow_summary(session: Session, period: dict | None = None, today: date | None = None) -> dict:
+def cashflow_summary(session: Session, user_id: int, period: dict | None = None, today: date | None = None) -> dict:
     """Money in vs out for the period. Debits here are ALL outflows (not just
     spending), so net reflects actual account movement; use spending_by_category
     for consumption-only totals."""
     start, end, label = resolve_period(period, today)
-    txns = [t for t in load_ledger(session) if _in_range(t, start, end)]
+    txns = [t for t in load_ledger(session, user_id) if _in_range(t, start, end)]
 
     credits = sum(t["amount"] for t in txns if t["type"] == TransactionType.credit)
     debits = sum(t["amount"] for t in txns if t["type"] == TransactionType.debit)
@@ -427,13 +431,13 @@ def cashflow_summary(session: Session, period: dict | None = None, today: date |
     }
 
 
-def income_summary(session: Session, period: dict | None = None, today: date | None = None) -> dict:
+def income_summary(session: Session, user_id: int, period: dict | None = None, today: date | None = None) -> dict:
     """Income for the period, by income category. Prefers confirmed income; if
     none is confirmed in the period, falls back to income candidates and flags
     the basis so the model can caveat the answer."""
     start, end, label = resolve_period(period, today)
     credits = [
-        t for t in load_ledger(session)
+        t for t in load_ledger(session, user_id)
         if _in_range(t, start, end) and t["type"] == TransactionType.credit
     ]
 
@@ -463,9 +467,9 @@ def income_summary(session: Session, period: dict | None = None, today: date | N
     }
 
 
-def _spending_total(session: Session, period: dict | None, primary: str | None, today: date | None):
+def _spending_total(session: Session, user_id: int, period: dict | None, primary: str | None, today: date | None):
     start, end, label = resolve_period(period, today)
-    txns = [t for t in load_ledger(session) if _in_range(t, start, end) and is_spending_txn(t)]
+    txns = [t for t in load_ledger(session, user_id) if _in_range(t, start, end) and is_spending_txn(t)]
     if primary:
         txns = [t for t in txns if t["expense_category"] == primary]
     return round(sum(t["amount"] for t in txns), 2), {"start": start.isoformat(), "end": end.isoformat(), "label": label}
@@ -473,6 +477,7 @@ def _spending_total(session: Session, period: dict | None, primary: str | None, 
 
 def compare_periods(
     session: Session,
+    user_id: int,
     period_a: dict | None,
     period_b: dict | None,
     primary: str | None = None,
@@ -480,8 +485,8 @@ def compare_periods(
 ) -> dict:
     """Compare spending between two periods. delta and pct_change are period_b
     relative to period_a (positive = increase)."""
-    a_total, a_meta = _spending_total(session, period_a, primary, today)
-    b_total, b_meta = _spending_total(session, period_b, primary, today)
+    a_total, a_meta = _spending_total(session, user_id, period_a, primary, today)
+    b_total, b_meta = _spending_total(session, user_id, period_b, primary, today)
     delta = round(b_total - a_total, 2)
     pct = round((delta / a_total * 100), 2) if a_total else None
     return {
@@ -535,10 +540,10 @@ def detect_recurring(txns: list[dict]) -> list[dict]:
     return results
 
 
-def recurring_charges(session: Session, primary: str | None = None, today: date | None = None) -> dict:
+def recurring_charges(session: Session, user_id: int, primary: str | None = None, today: date | None = None) -> dict:
     """Detected recurring charges across the full ledger (today unused; kept for
     a uniform tool signature)."""
-    txns = load_ledger(session)
+    txns = load_ledger(session, user_id)
     recurring = detect_recurring(txns)
     if primary:
         recurring = [r for r in recurring if r["category"] == primary]
@@ -550,6 +555,7 @@ _SEARCH_HARD_CAP = 100
 
 def search_transactions(
     session: Session,
+    user_id: int,
     period: dict | None = None,
     primary: str | None = None,
     subcategory: str | None = None,
@@ -563,7 +569,7 @@ def search_transactions(
     """Return individual line items matching filters. The ONLY tool that exposes
     raw descriptions; results are hard-capped at 100 rows."""
     limit = max(1, min(int(limit), _SEARCH_HARD_CAP))
-    txns = load_ledger(session)
+    txns = load_ledger(session, user_id)
 
     if period:
         start, end, _ = resolve_period(period, today)
@@ -678,23 +684,24 @@ TOOLS = [
 ]
 
 _DISPATCH = {
-    "spending_by_category": lambda s, a, today: spending_by_category(s, a.get("period"), a.get("primary"), today),
-    "cashflow_summary": lambda s, a, today: cashflow_summary(s, a.get("period"), today),
-    "income_summary": lambda s, a, today: income_summary(s, a.get("period"), today),
-    "compare_periods": lambda s, a, today: compare_periods(s, a.get("period_a"), a.get("period_b"), a.get("primary"), today),
-    "recurring_charges": lambda s, a, today: recurring_charges(s, a.get("primary"), today),
-    "search_transactions": lambda s, a, today: search_transactions(
-        s, a.get("period"), a.get("primary"), a.get("subcategory"),
+    "spending_by_category": lambda s, uid, a, today: spending_by_category(s, uid, a.get("period"), a.get("primary"), today),
+    "cashflow_summary": lambda s, uid, a, today: cashflow_summary(s, uid, a.get("period"), today),
+    "income_summary": lambda s, uid, a, today: income_summary(s, uid, a.get("period"), today),
+    "compare_periods": lambda s, uid, a, today: compare_periods(s, uid, a.get("period_a"), a.get("period_b"), a.get("primary"), today),
+    "recurring_charges": lambda s, uid, a, today: recurring_charges(s, uid, a.get("primary"), today),
+    "search_transactions": lambda s, uid, a, today: search_transactions(
+        s, uid, a.get("period"), a.get("primary"), a.get("subcategory"),
         a.get("min_amount"), a.get("max_amount"), a.get("merchant_contains"),
         a.get("txn_type"), a.get("limit", 50), today),
 }
 
 
-def data_coverage(session: Session) -> dict:
+def data_coverage(session: Session, user_id: int) -> dict:
     """Date range + distinct accounts the ledger covers, for the chat scope
     footer ("Based on your Jan–May 2026 data from N accounts")."""
     rows = session.exec(
         select(Transaction)
+        .where(Transaction.user_id == user_id)
         .where(Transaction.is_duplicate == False)   # noqa: E712
         .where(Transaction.is_ambiguous == False)    # noqa: E712
     ).all()
@@ -710,9 +717,9 @@ def data_coverage(session: Session) -> dict:
     }
 
 
-def starter_questions(session: Session) -> list[str]:
+def starter_questions(session: Session, user_id: int) -> list[str]:
     """4–6 suggested questions, contextual to what the user actually imported."""
-    txns = load_ledger(session)
+    txns = load_ledger(session, user_id)
     questions = [
         "What did I spend the most on last month?",
         "How much did I spend on dining last month?",
@@ -730,12 +737,12 @@ def starter_questions(session: Session) -> list[str]:
     return questions[:6]
 
 
-def dispatch_tool(session: Session, name: str, tool_input: dict, today: date | None = None) -> dict:
+def dispatch_tool(session: Session, user_id: int, name: str, tool_input: dict, today: date | None = None) -> dict:
     """Run a named tool, returning its result dict or {'error': ...} on failure."""
     fn = _DISPATCH.get(name)
     if fn is None:
         return {"error": f"Unknown tool: {name}"}
     try:
-        return fn(session, tool_input or {}, today)
+        return fn(session, user_id, tool_input or {}, today)
     except Exception as e:  # surfaced to the model, never crashes the loop
         return {"error": f"{type(e).__name__}: {e}"}

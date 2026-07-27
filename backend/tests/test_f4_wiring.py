@@ -1,12 +1,16 @@
 """Tests for F4 chat wiring: coverage footer, starter questions, observations."""
+from types import SimpleNamespace
+
 from fastapi.testclient import TestClient
 
 import app.routers.chat as chat_router
 from app.main import app
 from app.database import get_session
+from app.dependencies import get_current_user
 from app.models.import_job import ImportJob, ImportStatus
 from app.models.transaction import TransactionType
 from app.services.analytics import data_coverage, starter_questions
+from tests.conftest import TEST_USER_ID
 
 
 def _override(session):
@@ -15,13 +19,17 @@ def _override(session):
     return _dep
 
 
+def _override_user():
+    return lambda: SimpleNamespace(id=TEST_USER_ID)
+
+
 def test_data_coverage_reports_range_and_accounts(make_txn):
     s = make_txn.__self_session__
     make_txn(day="2026-01-05", amount=100.0, txn_type=TransactionType.debit,
              description="SAFEWAY", expense_category="food_and_drink")
     make_txn(day="2026-03-20", amount=50.0, txn_type=TransactionType.debit,
              description="SHELL", expense_category="transportation")
-    cov = data_coverage(s)
+    cov = data_coverage(s, TEST_USER_ID)
     assert cov["date_range"] == {"from": "2026-01-05", "to": "2026-03-20"}
     assert cov["transaction_count"] == 2
 
@@ -30,7 +38,7 @@ def test_starter_questions_include_freelance_when_present(make_txn):
     s = make_txn.__self_session__
     make_txn(day="2026-02-01", amount=2000.0, txn_type=TransactionType.credit,
              description="STRIPE TRANSFER", is_income_candidate=True, income_category="freelance")
-    qs = starter_questions(s)
+    qs = starter_questions(s, TEST_USER_ID)
     assert 4 <= len(qs) <= 6
     assert any("freelance" in q.lower() for q in qs)
 
@@ -41,6 +49,7 @@ def test_chat_response_includes_coverage(session, monkeypatch):
         lambda *a, **k: {"answer": "ok", "tools_used": []},
     )
     app.dependency_overrides[get_session] = _override(session)
+    app.dependency_overrides[get_current_user] = _override_user()
     try:
         res = TestClient(app).post("/api/chat", json={"question": "hi", "history": []})
         assert res.status_code == 200
@@ -51,6 +60,7 @@ def test_chat_response_includes_coverage(session, monkeypatch):
 
 def test_starters_endpoint(session):
     app.dependency_overrides[get_session] = _override(session)
+    app.dependency_overrides[get_current_user] = _override_user()
     try:
         res = TestClient(app).get("/api/chat/starters")
         assert res.status_code == 200
@@ -61,7 +71,7 @@ def test_starters_endpoint(session):
 
 def test_observations_endpoint(make_txn):
     s = make_txn.__self_session__
-    s.add(ImportJob(id="job1", file_count=1, status=ImportStatus.completed))
+    s.add(ImportJob(id="job1", user_id=TEST_USER_ID, file_count=1, status=ImportStatus.completed))
     make_txn(day="2026-05-02", amount=6000.0, txn_type=TransactionType.credit,
              description="ADP PAYROLL", is_income_candidate=True,
              income_confirmed=True, income_category="salary")
@@ -70,6 +80,7 @@ def test_observations_endpoint(make_txn):
     s.commit()
 
     app.dependency_overrides[get_session] = _override(s)
+    app.dependency_overrides[get_current_user] = _override_user()
     try:
         res = TestClient(app).get("/api/import/job1/observations")
         assert res.status_code == 200

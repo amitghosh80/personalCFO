@@ -4,8 +4,10 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from ..database import get_session
+from ..dependencies import get_current_user
 from ..models.import_job import ImportJob, ImportStatus
 from ..models.transaction import IncomeCategory, Transaction, TransactionType
+from ..models.user import User
 from ..services.encryption import decrypt
 from ..services.income_classifier import exclude_from_review
 
@@ -48,8 +50,9 @@ def _serialize(t: Transaction) -> dict:
 def list_transactions(
     import_job_id: Optional[str] = None,
     session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
-    query = select(Transaction)
+    query = select(Transaction).where(Transaction.user_id == current_user.id)
     if import_job_id:
         query = query.where(Transaction.import_job_id == import_job_id)
     query = query.order_by(Transaction.date.desc())
@@ -57,11 +60,16 @@ def list_transactions(
 
 
 @router.get("/import/{job_id}/income-review")
-def get_income_candidates(job_id: str, session: Session = Depends(get_session)):
-    _require_job(session, job_id)
+def get_income_candidates(
+    job_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    _require_job(session, current_user.id, job_id)
 
     query = (
         select(Transaction)
+        .where(Transaction.user_id == current_user.id)
         .where(Transaction.import_job_id == job_id)
         .where(Transaction.transaction_type == TransactionType.credit)
         .order_by(Transaction.is_income_candidate.desc(), Transaction.amount.desc())
@@ -83,13 +91,14 @@ def confirm_income(
     job_id: str,
     body: IncomeConfirmationRequest,
     session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
-    _require_job(session, job_id)
+    _require_job(session, current_user.id, job_id)
 
     updated = 0
     for txn_id in body.transaction_ids:
         txn = session.get(Transaction, txn_id)
-        if not txn or txn.import_job_id != job_id:
+        if not txn or txn.user_id != current_user.id or txn.import_job_id != job_id:
             raise HTTPException(status_code=404, detail=f"Transaction {txn_id} not found in job {job_id}")
         txn.income_confirmed = body.confirmed
         if body.income_category:
@@ -104,20 +113,27 @@ def confirm_income(
 
 
 @router.get("/summary")
-def get_ledger_summary(session: Session = Depends(get_session)):
+def get_ledger_summary(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     """Whole-ledger spending-by-category-per-month dashboard across all imports
     (the "View import" tab). Same math as the chat tools."""
     from ..services.analytics import monthly_summary
-    return monthly_summary(session)
+    return monthly_summary(session, current_user.id)
 
 
 @router.get("/income/review-status")
-def income_review_status(session: Session = Depends(get_session)):
+def income_review_status(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     """Whether any auto-detected income is still unreviewed (skipped or not yet
     confirmed/denied), so the app can show a persistent 'income incomplete'
     banner linking back to review (PRD F2 / AMI-24)."""
     rows = session.exec(
         select(Transaction)
+        .where(Transaction.user_id == current_user.id)
         .where(Transaction.is_income_candidate == True)   # noqa: E712
         .where(Transaction.income_confirmed == None)        # noqa: E711
         .where(Transaction.is_duplicate == False)           # noqa: E712
@@ -132,13 +148,19 @@ def income_review_status(session: Session = Depends(get_session)):
 
 
 @router.get("/import/{job_id}/summary")
-def get_import_summary(job_id: str, session: Session = Depends(get_session)):
+def get_import_summary(
+    job_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     from collections import defaultdict
     from ..services.expense_categorizer import CATEGORY_DISPLAY, is_spending
 
-    job = _require_job(session, job_id)
+    job = _require_job(session, current_user.id, job_id)
     txns = session.exec(
-        select(Transaction).where(Transaction.import_job_id == job_id)
+        select(Transaction)
+        .where(Transaction.user_id == current_user.id)
+        .where(Transaction.import_job_id == job_id)
     ).all()
 
     # Build month-keyed buckets (YYYY-MM)
@@ -205,16 +227,20 @@ def get_import_summary(job_id: str, session: Session = Depends(get_session)):
 
 
 @router.get("/import/{job_id}/observations")
-def get_proactive_observations(job_id: str, session: Session = Depends(get_session)):
+def get_proactive_observations(
+    job_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     """The PRD F4 post-import observations (2–3 grounded notes) for the chat
     window. Each observation cites a real number from the user's data."""
     from ..services.insight_engine import proactive_observations
-    _require_job(session, job_id)
-    return {"observations": proactive_observations(session, job_id)}
+    _require_job(session, current_user.id, job_id)
+    return {"observations": proactive_observations(session, current_user.id, job_id)}
 
 
-def _require_job(session: Session, job_id: str) -> ImportJob:
+def _require_job(session: Session, user_id: int, job_id: str) -> ImportJob:
     job = session.get(ImportJob, job_id)
-    if not job:
+    if not job or job.user_id != user_id:
         raise HTTPException(status_code=404, detail=f"Import job {job_id} not found")
     return job

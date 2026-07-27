@@ -910,12 +910,12 @@ def _run_detectors(txns: list[dict], job_id: str = "") -> list[dict]:
     return candidates
 
 
-def collect_signals(session: Session) -> list[dict]:
+def collect_signals(session: Session, user_id: int) -> list[dict]:
     """Whole-ledger detector signals as plain dicts, without persisting anything.
 
     This is the grounded candidate set the AI insight layer reasons over. The
     `import_job_id` field on each dict is a harmless empty-string label."""
-    txns = _load_txns(session)
+    txns = _load_txns(session, user_id)
     if not txns:
         return []
     return _run_detectors(txns)
@@ -938,7 +938,7 @@ _SPENDING_OBS_PRIORITY = [
 ]
 
 
-def proactive_observations(session: Session, job_id: str) -> list[dict]:
+def proactive_observations(session: Session, user_id: int, job_id: str) -> list[dict]:
     """Return 2–3 grounded observations for the chat window after an import.
 
     Each observation is ``{kind, title, text}`` where ``kind`` is one of
@@ -946,7 +946,7 @@ def proactive_observations(session: Session, job_id: str) -> list[dict]:
     summary scoped to the imported period, plus the most salient spending signal
     and (if present) one anomaly. Returns ``[]`` only when there is no data.
     """
-    txns = _load_txns(session)
+    txns = _load_txns(session, user_id)
     if not txns:
         return []
 
@@ -956,6 +956,7 @@ def proactive_observations(session: Session, job_id: str) -> list[dict]:
     # 1) Income/cashflow summary, scoped to the months this import touched.
     job_rows = session.exec(
         select(Transaction)
+        .where(Transaction.user_id == user_id)
         .where(Transaction.import_job_id == job_id)
         .where(Transaction.is_duplicate == False)   # noqa: E712
         .where(Transaction.is_ambiguous == False)    # noqa: E712
@@ -963,7 +964,7 @@ def proactive_observations(session: Session, job_id: str) -> list[dict]:
     if job_rows:
         months = sorted({r.date.strftime("%Y-%m") for r in job_rows})
         latest = months[-1]
-        cf = cashflow_summary(session, {"month": latest})
+        cf = cashflow_summary(session, user_id, {"month": latest})
         net = cf["net_cashflow"]
         label = _fmt(latest)
         sign = "+" if net >= 0 else "-"
@@ -993,15 +994,19 @@ def proactive_observations(session: Session, job_id: str) -> list[dict]:
     return observations[:3]
 
 
-def generate_insights(session: Session, job_id: str) -> list[Insight]:
-    txns = _load_txns(session)
+def generate_insights(session: Session, user_id: int, job_id: str) -> list[Insight]:
+    txns = _load_txns(session, user_id)
     if not txns:
         return []
 
     candidates = _run_detectors(txns, job_id)
 
     # Deduplicate against existing non-dismissed insights
-    existing = session.exec(select(Insight).where(Insight.is_dismissed == False)).all()  # noqa: E712
+    existing = session.exec(
+        select(Insight)
+        .where(Insight.user_id == user_id)
+        .where(Insight.is_dismissed == False)  # noqa: E712
+    ).all()
     existing_keys = {_dedup_key({"insight_type": i.insight_type, "meta_json": i.meta_json,
                                   "time_period_start": i.time_period_start,
                                   "time_period_end": i.time_period_end}) for i in existing}
@@ -1012,7 +1017,7 @@ def generate_insights(session: Session, job_id: str) -> list[Insight]:
         if key in existing_keys:
             continue
         existing_keys.add(key)
-        ins = Insight(**d)
+        ins = Insight(**d, user_id=user_id)
         session.add(ins)
         new_insights.append(ins)
 

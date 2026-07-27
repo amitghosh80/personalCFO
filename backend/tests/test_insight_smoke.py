@@ -1,5 +1,6 @@
 from app.models.transaction import TransactionType
 from app.services.insight_engine import generate_insights
+from tests.conftest import TEST_USER_ID
 
 
 def test_generate_insights_runs_on_seeded_ledger(make_txn):
@@ -13,5 +14,5 @@ def test_generate_insights_runs_on_seeded_ledger(make_txn):
              description="ACME PAYROLL", is_income_candidate=True, income_confirmed=True,
              income_category="salary")
 
-    insights = generate_insights(s, "job1")
+    insights = generate_insights(s, TEST_USER_ID, "job1")
     assert isinstance(insights, list)  # runs without error and returns rows

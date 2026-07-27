@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from app.models.transaction import TransactionType
 from app.services import chat_service
 from app.services.analytics import uncategorized_status
+from tests.conftest import TEST_USER_ID
 
 TODAY = date(2026, 6, 6)
 D = TransactionType.debit
@@ -40,12 +41,12 @@ def _seed(make_txn, categorized, uncategorized, amount=50.0):
 
 def test_status_trips_over_count_threshold(make_txn):
     _seed(make_txn, categorized=8, uncategorized=2)   # 2/10 = 20% > 10%
-    assert uncategorized_status(make_txn.__self_session__)["over"] is True
+    assert uncategorized_status(make_txn.__self_session__, TEST_USER_ID)["over"] is True
 
 
 def test_status_below_threshold_is_not_over(make_txn):
     _seed(make_txn, categorized=19, uncategorized=1)  # 1/20 = 5%, spend 5%
-    assert uncategorized_status(make_txn.__self_session__)["over"] is False
+    assert uncategorized_status(make_txn.__self_session__, TEST_USER_ID)["over"] is False
 
 
 # ── chatbot gating ───────────────────────────────────────────────────────────
@@ -58,7 +59,7 @@ def _spending_answer_run(session, **kw):
             _text("In May 2026 you spent $500.00 on food.")]),
     ]
     return chat_service.answer_question(
-        session, "How much did I spend?", [], client=FakeClient(responses),
+        session, TEST_USER_ID, "How much did I spend?", [], client=FakeClient(responses),
         model="m", today=TODAY, **kw)
 
 

@@ -20,6 +20,8 @@ from app.services.encryption import encrypt  # noqa: E402
 
 get_settings.cache_clear()  # pick up the ENCRYPTION_KEY we just set
 
+TEST_USER_ID = 1
+
 
 @pytest.fixture
 def session():
@@ -50,6 +52,7 @@ def _make_txn(
     is_ambiguous: bool = False,
 ) -> Transaction:
     t = Transaction(
+        user_id=TEST_USER_ID,
         import_job_id="job1",
         date=_date.fromisoformat(day),
         description=encrypt(description),
@@ -75,4 +78,5 @@ def make_txn(session):
     def _factory(**kwargs):
         return _make_txn(session, **kwargs)
     _factory.__self_session__ = session
+    _factory.__self_user_id__ = TEST_USER_ID
     return _factory

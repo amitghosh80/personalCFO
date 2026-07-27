@@ -7,6 +7,7 @@ from sqlmodel import Session, SQLModel, create_engine
 from app.models.transaction import Transaction, TransactionType
 from app.services.encryption import encrypt
 from app.services.insight_engine import proactive_observations
+from tests.conftest import TEST_USER_ID
 
 
 def _engine():
@@ -17,6 +18,7 @@ def _engine():
 
 def _txn(job_id, d, desc, amount, ttype, **kw):
     return Transaction(
+        user_id=TEST_USER_ID,
         import_job_id=job_id, date=d, description=encrypt(desc), amount=amount,
         transaction_type=ttype, source_file_hash="h", **kw,
     )
@@ -44,7 +46,7 @@ def test_returns_two_to_three_observations_with_summary():
     eng = _engine()
     with Session(eng) as session:
         _seed(session, "job-1")
-        obs = proactive_observations(session, "job-1")
+        obs = proactive_observations(session, TEST_USER_ID, "job-1")
 
     assert 1 <= len(obs) <= 3
     kinds = {o["kind"] for o in obs}
@@ -59,7 +61,7 @@ def test_includes_a_spending_observation():
     eng = _engine()
     with Session(eng) as session:
         _seed(session, "job-1")
-        obs = proactive_observations(session, "job-1")
+        obs = proactive_observations(session, TEST_USER_ID, "job-1")
     assert any(o["kind"] == "spending" for o in obs)
     for o in obs:
         assert o["title"] and o["text"]
@@ -68,4 +70,4 @@ def test_includes_a_spending_observation():
 def test_empty_ledger_returns_nothing():
     eng = _engine()
     with Session(eng) as session:
-        assert proactive_observations(session, "missing-job") == []
+        assert proactive_observations(session, TEST_USER_ID, "missing-job") == []

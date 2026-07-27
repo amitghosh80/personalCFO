@@ -12,6 +12,7 @@ class ImportStatus(str, Enum):
 
 class ImportJob(SQLModel, table=True):
     id: str = Field(primary_key=True)  # UUID
+    user_id: Optional[int] = Field(default=None, foreign_key="app_user.id", index=True)
     status: ImportStatus = Field(default=ImportStatus.processing)
     file_count: int
     total_transactions: int = Field(default=0)

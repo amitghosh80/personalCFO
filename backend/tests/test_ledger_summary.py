@@ -3,13 +3,16 @@ category, per month, across every import — using the same load_ledger +
 is_spending_txn math as the chat tools so the dashboard and chatbot agree.
 """
 from datetime import date
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.database import get_session
+from app.dependencies import get_current_user
 from app.models.transaction import TransactionType
 from app.services.analytics import monthly_summary
+from tests.conftest import TEST_USER_ID
 
 D = TransactionType.debit
 C = TransactionType.credit
@@ -19,6 +22,10 @@ def _override(session):
     def _dep():
         yield session
     return _dep
+
+
+def _override_user():
+    return lambda: SimpleNamespace(id=TEST_USER_ID)
 
 
 def test_monthly_summary_aggregates_and_excludes_non_spending(make_txn):
@@ -31,7 +38,7 @@ def test_monthly_summary_aggregates_and_excludes_non_spending(make_txn):
     make_txn(day="2026-04-01", amount=5000.0, txn_type=C, description="GUSTO PAYROLL",
              is_income_candidate=True, income_confirmed=True, income_category="salary")
 
-    out = monthly_summary(s)
+    out = monthly_summary(s, TEST_USER_ID)
     months = {r["month"]: r for r in out["monthly_breakdown"]}
 
     assert set(months) == {"2026-04", "2026-05"}
@@ -49,8 +56,12 @@ def test_ledger_summary_endpoint(make_txn):
     s = make_txn.__self_session__
     make_txn(day="2026-04-03", amount=100.0, txn_type=D, description="SAFEWAY", expense_category="food_and_drink")
     app.dependency_overrides[get_session] = _override(s)
-    res = TestClient(app).get("/api/summary")
-    assert res.status_code == 200
-    body = res.json()
-    assert body["total_transactions"] == 1
-    assert body["monthly_breakdown"][0]["month"] == "2026-04"
+    app.dependency_overrides[get_current_user] = _override_user()
+    try:
+        res = TestClient(app).get("/api/summary")
+        assert res.status_code == 200
+        body = res.json()
+        assert body["total_transactions"] == 1
+        assert body["monthly_breakdown"][0]["month"] == "2026-04"
+    finally:
+        app.dependency_overrides.clear()

@@ -158,7 +158,7 @@ def _apply(txn: Transaction, primary: str, sub: str, source: str, conf: float) -
     txn.confidence_label = confidence_label(conf)
 
 
-def categorize_job(session: Session, job_id: str, *, client=None, model: str | None = None) -> dict:
+def categorize_job(session: Session, user_id: int, job_id: str, *, client=None, model: str | None = None) -> dict:
     """Resolve every still-uncategorized debit in a job via user rules, the
     merchant cache, then the AI model. Commits and returns a small summary.
 
@@ -166,6 +166,7 @@ def categorize_job(session: Session, job_id: str, *, client=None, model: str | N
     stay 'other' at low confidence (surfaced in the uncategorized queue)."""
     rows = session.exec(
         select(Transaction)
+        .where(Transaction.user_id == user_id)
         .where(Transaction.import_job_id == job_id)
         .where(Transaction.transaction_type == TransactionType.debit)
         .where(Transaction.is_duplicate == False)        # noqa: E712
@@ -174,7 +175,7 @@ def categorize_job(session: Session, job_id: str, *, client=None, model: str | N
     if not rows:
         return {"resolved_by_rule": 0, "resolved_by_cache": 0, "resolved_by_ai": 0, "uncategorized": 0}
 
-    user_rules = session.exec(select(MerchantRule)).all()
+    user_rules = session.exec(select(MerchantRule).where(MerchantRule.user_id == user_id)).all()
 
     by_rule = by_cache = by_ai = 0
     needs_ai: dict[str, list[Transaction]] = {}

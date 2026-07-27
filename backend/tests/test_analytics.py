@@ -2,6 +2,7 @@ from datetime import date
 
 from app.models.transaction import TransactionType
 from app.services import analytics
+from tests.conftest import TEST_USER_ID
 
 TODAY = date(2026, 6, 6)
 
@@ -14,7 +15,7 @@ def test_load_ledger_decrypts_and_excludes_dupes_and_ambiguous(make_txn):
     make_txn(day="2026-05-03", amount=88.0, txn_type=TransactionType.debit,
              description="AMBIG", expense_category="shopping", is_ambiguous=True)
 
-    rows = analytics.load_ledger(_session_of(make_txn))
+    rows = analytics.load_ledger(_session_of(make_txn), TEST_USER_ID)
     assert len(rows) == 1
     assert rows[0]["description"] == "STARBUCKS"
     assert rows[0]["month"] == "2026-05"
@@ -76,7 +77,7 @@ def test_spending_by_category_groups_and_excludes_non_spending(make_txn):
     make_txn(day="2026-04-01", amount=999.0, txn_type=TransactionType.debit,
              description="OLD", expense_category="shopping")
 
-    out = analytics.spending_by_category(s, {"month": "2026-05"}, today=TODAY)
+    out = analytics.spending_by_category(s, TEST_USER_ID, {"month": "2026-05"}, today=TODAY)
 
     assert out["total_spending"] == 200.0
     assert out["transaction_count"] == 3
@@ -94,7 +95,7 @@ def test_spending_by_category_filtered_to_one_primary(make_txn):
     make_txn(day="2026-05-15", amount=60.0, txn_type=TransactionType.debit,
              description="SHELL", expense_category="transportation", expense_subcategory="gas")
 
-    out = analytics.spending_by_category(s, {"month": "2026-05"}, primary="transportation", today=TODAY)
+    out = analytics.spending_by_category(s, TEST_USER_ID, {"month": "2026-05"}, primary="transportation", today=TODAY)
     assert out["total_spending"] == 60.0
     assert len(out["by_primary"]) == 1
     assert out["by_primary"][0]["category"] == "transportation"
@@ -110,7 +111,7 @@ def test_cashflow_summary_totals_and_by_month(make_txn):
     make_txn(day="2026-06-05", amount=100.0, txn_type=TransactionType.debit,
              description="SHELL", expense_category="transportation")
 
-    out = analytics.cashflow_summary(s, {"start": "2026-05-01", "end": "2026-06-30"}, today=TODAY)
+    out = analytics.cashflow_summary(s, TEST_USER_ID, {"start": "2026-05-01", "end": "2026-06-30"}, today=TODAY)
     assert out["total_credits"] == 3000.0
     assert out["total_debits"] == 300.0
     assert out["net_cashflow"] == 2700.0
@@ -133,7 +134,7 @@ def test_income_summary_prefers_confirmed_and_groups_by_category(make_txn):
              description="MAYBE INCOME", is_income_candidate=True, income_confirmed=None,
              income_category="other")
 
-    out = analytics.income_summary(s, {"month": "2026-05"}, today=TODAY)
+    out = analytics.income_summary(s, TEST_USER_ID, {"month": "2026-05"}, today=TODAY)
     assert out["basis"] == "confirmed"
     assert out["total_income"] == 3050.0
     by_cat = {c["category"]: c["amount"] for c in out["by_category"]}
@@ -148,7 +149,7 @@ def test_compare_periods_delta_and_pct(make_txn):
              description="SAFEWAY", expense_category="food_and_drink")
 
     out = analytics.compare_periods(
-        s, {"month": "2026-04"}, {"month": "2026-05"}, today=TODAY)
+        s, TEST_USER_ID, {"month": "2026-04"}, {"month": "2026-05"}, today=TODAY)
     assert out["period_a"]["total"] == 100.0
     assert out["period_b"]["total"] == 150.0
     assert out["delta"] == 50.0
@@ -165,7 +166,7 @@ def test_recurring_charges_detects_monthly_merchant(make_txn):
     make_txn(day="2026-05-02", amount=200.0, txn_type=TransactionType.debit,
              description="RANDOM SHOP", expense_category="shopping")
 
-    out = analytics.recurring_charges(s, today=TODAY)
+    out = analytics.recurring_charges(s, TEST_USER_ID, today=TODAY)
     merchants = {r["merchant"]: r for r in out["recurring"]}
     assert "NETFLIX SUBSCRIPTION" in merchants
     netflix = merchants["NETFLIX SUBSCRIPTION"]
@@ -185,17 +186,17 @@ def test_search_transactions_filters_and_caps(make_txn):
              description="BIG TV", expense_category="shopping")
 
     # Filter by merchant substring (case-insensitive).
-    out = analytics.search_transactions(s, merchant_contains="coffee", today=TODAY)
+    out = analytics.search_transactions(s, TEST_USER_ID, merchant_contains="coffee", today=TODAY)
     assert out["returned"] == 5
     assert all("COFFEE" in t["description"] for t in out["transactions"])
 
     # Filter by amount.
-    out = analytics.search_transactions(s, min_amount=100.0, today=TODAY)
+    out = analytics.search_transactions(s, TEST_USER_ID, min_amount=100.0, today=TODAY)
     assert out["returned"] == 1
     assert out["transactions"][0]["description"] == "BIG TV"
 
     # Cap enforced.
-    out = analytics.search_transactions(s, limit=2, today=TODAY)
+    out = analytics.search_transactions(s, TEST_USER_ID, limit=2, today=TODAY)
     assert out["returned"] == 2
     assert out["truncated"] is True
     assert out["limit"] == 2
@@ -216,11 +217,11 @@ def test_dispatch_tool_routes_and_wraps_errors(make_txn):
     make_txn(day="2026-05-02", amount=100.0, txn_type=TransactionType.debit,
              description="SAFEWAY", expense_category="food_and_drink")
 
-    ok = analytics.dispatch_tool(s, "spending_by_category", {"period": {"month": "2026-05"}}, today=TODAY)
+    ok = analytics.dispatch_tool(s, TEST_USER_ID, "spending_by_category", {"period": {"month": "2026-05"}}, today=TODAY)
     assert ok["total_spending"] == 100.0
 
-    err = analytics.dispatch_tool(s, "spending_by_category", {"period": {"month": "garbage"}}, today=TODAY)
+    err = analytics.dispatch_tool(s, TEST_USER_ID, "spending_by_category", {"period": {"month": "garbage"}}, today=TODAY)
     assert "error" in err
 
-    unknown = analytics.dispatch_tool(s, "no_such_tool", {}, today=TODAY)
+    unknown = analytics.dispatch_tool(s, TEST_USER_ID, "no_such_tool", {}, today=TODAY)
     assert "error" in unknown

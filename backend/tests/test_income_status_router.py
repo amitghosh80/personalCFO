@@ -2,13 +2,16 @@
 income was skipped / left unreviewed), so the dashboard can show a persistent
 banner linking back to review."""
 from datetime import date
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.database import get_session
+from app.dependencies import get_current_user
 from app.models.transaction import Transaction, TransactionType
 from app.services.encryption import encrypt
+from tests.conftest import TEST_USER_ID
 
 
 def _override(session):
@@ -19,11 +22,13 @@ def _override(session):
 
 def _client(session):
     app.dependency_overrides[get_session] = _override(session)
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=TEST_USER_ID)
     return TestClient(app)
 
 
 def _income(session, *, job, confirmed):
     session.add(Transaction(
+        user_id=TEST_USER_ID,
         import_job_id=job, date=date(2026, 5, 1), description=encrypt("GUSTO PAYROLL"),
         amount=5000.0, transaction_type=TransactionType.credit, source_file_hash="h",
         is_income_candidate=True, income_confirmed=confirmed,

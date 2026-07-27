@@ -6,6 +6,7 @@ from sqlmodel import select
 from app.models.insight import Insight
 from app.models.transaction import TransactionType
 from app.services.insight_engine import collect_signals, generate_insights
+from tests.conftest import TEST_USER_ID
 
 
 def _seed_two_months(make_txn):
@@ -23,7 +24,7 @@ def test_collect_signals_returns_candidate_dicts(make_txn):
     s = make_txn.__self_session__
     _seed_two_months(make_txn)
 
-    signals = collect_signals(s)
+    signals = collect_signals(s, TEST_USER_ID)
 
     assert isinstance(signals, list)
     assert len(signals) > 0
@@ -35,7 +36,7 @@ def test_collect_signals_does_not_persist(make_txn):
     s = make_txn.__self_session__
     _seed_two_months(make_txn)
 
-    collect_signals(s)
+    collect_signals(s, TEST_USER_ID)
 
     # No Insight rows should have been written by collect_signals.
     assert s.exec(select(Insight)).all() == []
@@ -45,7 +46,7 @@ def test_generate_insights_still_persists(make_txn):
     s = make_txn.__self_session__
     _seed_two_months(make_txn)
 
-    created = generate_insights(s, "job1")
+    created = generate_insights(s, TEST_USER_ID, "job1")
 
     assert len(created) > 0
     assert len(s.exec(select(Insight)).all()) == len(created)

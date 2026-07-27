@@ -1,6 +1,29 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import IncomeBanner from "@/components/IncomeBanner";
+import { isAuthenticated, clearToken } from "@/lib/auth";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const [checked, setChecked] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      router.replace("/login");
+    } else {
+      setChecked(true);
+    }
+  }, [router]);
+
+  function handleLogout() {
+    clearToken();
+    router.push("/login");
+  }
+
+  if (!checked) return null;
+
   return (
     <>
       <IncomeBanner />
@@ -25,6 +48,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <a href="/chat" className="text-sm text-blue-600 hover:text-blue-800 transition-colors">
               Ask CFO
             </a>
+            <button
+              onClick={handleLogout}
+              className="text-sm text-gray-500 hover:text-gray-800 transition-colors"
+            >
+              Log out
+            </button>
           </div>
         </div>
       </nav>

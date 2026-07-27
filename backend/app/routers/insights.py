@@ -5,8 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
 from ..database import get_session
+from ..dependencies import get_current_user
 from ..models.import_job import ImportJob
 from ..models.insight import Insight
+from ..models.user import User
 from ..services.insight_engine import generate_insights
 
 router = APIRouter(prefix="/api", tags=["insights"])
@@ -35,11 +37,15 @@ def _serialize(ins: Insight) -> dict:
 
 
 @router.post("/import/{job_id}/generate-insights")
-def trigger_insights(job_id: str, session: Session = Depends(get_session)):
+def trigger_insights(
+    job_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     job = session.get(ImportJob, job_id)
-    if not job:
+    if not job or job.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Import job not found")
-    new = generate_insights(session, job_id)
+    new = generate_insights(session, current_user.id, job_id)
     return {
         "job_id": job_id,
         "insights_generated": len(new),
@@ -53,8 +59,9 @@ def get_insight_feed(
     type: Optional[str] = None,
     include_dismissed: bool = False,
     session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
-    query = select(Insight)
+    query = select(Insight).where(Insight.user_id == current_user.id)
     if not include_dismissed:
         query = query.where(Insight.is_dismissed == False)  # noqa: E712
     if severity:
@@ -81,9 +88,13 @@ def get_insight_feed(
 
 
 @router.patch("/insights/{insight_id}/dismiss")
-def dismiss_insight(insight_id: int, session: Session = Depends(get_session)):
+def dismiss_insight(
+    insight_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     ins = session.get(Insight, insight_id)
-    if not ins:
+    if not ins or ins.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Insight not found")
     ins.is_dismissed = True
     session.add(ins)

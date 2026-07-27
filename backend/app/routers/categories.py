@@ -13,8 +13,10 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from ..database import get_session
+from ..dependencies import get_current_user
 from ..models.merchant_rule import MerchantRule
 from ..models.transaction import Transaction, TransactionType
+from ..models.user import User
 from ..services.ai_categorizer import normalize_merchant
 from ..services.encryption import decrypt
 from ..services.expense_categorizer import (
@@ -61,19 +63,21 @@ def _apply_user_category(t: Transaction, primary: str, subcategory: str) -> None
     t.confidence_label = "high"
 
 
-def _maybe_create_rule(session: Session, description: str, primary: str, subcategory: str) -> None:
+def _maybe_create_rule(session: Session, user_id: int, description: str, primary: str, subcategory: str) -> None:
     pattern = normalize_merchant(description)
     if not pattern:
         return
     existing = session.exec(
-        select(MerchantRule).where(MerchantRule.merchant_pattern == pattern)
+        select(MerchantRule)
+        .where(MerchantRule.user_id == user_id)
+        .where(MerchantRule.merchant_pattern == pattern)
     ).first()
     if existing:
         existing.primary = primary
         existing.subcategory = subcategory
         session.add(existing)
     else:
-        session.add(MerchantRule(merchant_pattern=pattern, primary=primary, subcategory=subcategory))
+        session.add(MerchantRule(user_id=user_id, merchant_pattern=pattern, primary=primary, subcategory=subcategory))
 
 
 @router.get("/taxonomy")
@@ -95,33 +99,42 @@ def get_taxonomy():
 
 
 @router.patch("/transaction/{txn_id}")
-def update_category(txn_id: int, body: CategoryUpdate, session: Session = Depends(get_session)):
+def update_category(
+    txn_id: int,
+    body: CategoryUpdate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     _validate(body.primary, body.subcategory)
     txn = session.get(Transaction, txn_id)
-    if not txn:
+    if not txn or txn.user_id != current_user.id:
         raise HTTPException(status_code=404, detail=f"Transaction {txn_id} not found")
 
     _apply_user_category(txn, body.primary, body.subcategory)
     session.add(txn)
     if body.create_rule:
-        _maybe_create_rule(session, decrypt(txn.description), body.primary, body.subcategory)
+        _maybe_create_rule(session, current_user.id, decrypt(txn.description), body.primary, body.subcategory)
     session.commit()
     return {"updated": 1, "rule_created": body.create_rule}
 
 
 @router.post("/bulk")
-def bulk_update_category(body: BulkCategoryUpdate, session: Session = Depends(get_session)):
+def bulk_update_category(
+    body: BulkCategoryUpdate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     _validate(body.primary, body.subcategory)
     updated = 0
     rule_done = False
     for txn_id in body.transaction_ids:
         txn = session.get(Transaction, txn_id)
-        if not txn:
+        if not txn or txn.user_id != current_user.id:
             raise HTTPException(status_code=404, detail=f"Transaction {txn_id} not found")
         _apply_user_category(txn, body.primary, body.subcategory)
         session.add(txn)
         if body.create_rule and not rule_done:
-            _maybe_create_rule(session, decrypt(txn.description), body.primary, body.subcategory)
+            _maybe_create_rule(session, current_user.id, decrypt(txn.description), body.primary, body.subcategory)
             rule_done = True
         updated += 1
     session.commit()
@@ -132,11 +145,13 @@ def bulk_update_category(body: BulkCategoryUpdate, session: Session = Depends(ge
 def uncategorized_queue(
     import_job_id: Optional[str] = None,
     session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
     """Low-confidence / uncategorized debits, sorted by amount descending, for
     the batch-review queue."""
     query = (
         select(Transaction)
+        .where(Transaction.user_id == current_user.id)
         .where(Transaction.transaction_type == TransactionType.debit)
         .where(Transaction.is_duplicate == False)  # noqa: E712
     )
@@ -162,11 +177,13 @@ def uncategorized_queue(
 def uncategorized_alert(
     import_job_id: Optional[str] = None,
     session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
 ):
     """Threshold alert: trips when uncategorized exceeds 10% of non-income
     transactions OR 15% of spend dollars (PRD F3)."""
     query = (
         select(Transaction)
+        .where(Transaction.user_id == current_user.id)
         .where(Transaction.transaction_type == TransactionType.debit)
         .where(Transaction.is_duplicate == False)  # noqa: E712
     )
@@ -203,8 +220,15 @@ def uncategorized_alert(
 
 
 @router.get("/rules")
-def list_rules(session: Session = Depends(get_session)):
-    rules = session.exec(select(MerchantRule).order_by(MerchantRule.created_at.desc())).all()
+def list_rules(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    rules = session.exec(
+        select(MerchantRule)
+        .where(MerchantRule.user_id == current_user.id)
+        .order_by(MerchantRule.created_at.desc())
+    ).all()
     return [
         {
             "id": r.id,
@@ -220,9 +244,13 @@ def list_rules(session: Session = Depends(get_session)):
 
 
 @router.delete("/rules/{rule_id}")
-def delete_rule(rule_id: int, session: Session = Depends(get_session)):
+def delete_rule(
+    rule_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     rule = session.get(MerchantRule, rule_id)
-    if not rule:
+    if not rule or rule.user_id != current_user.id:
         raise HTTPException(status_code=404, detail=f"Rule {rule_id} not found")
     session.delete(rule)
     session.commit()

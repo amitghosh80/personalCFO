@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     ai_categorizer_model: str = "claude-haiku-4-5"
     chat_model: str = "claude-sonnet-4-6"
+    jwt_secret: str = ""
+    jwt_expire_minutes: int = 60 * 24 * 30  # 30 days
+    # Comma-separated list of extra allowed CORS origins (prod frontend domain).
+    allowed_origins: str = ""
 
     class Config:
         env_file = ".env"

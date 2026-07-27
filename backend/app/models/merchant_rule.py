@@ -14,6 +14,7 @@ class MerchantRule(SQLModel, table=True):
     """
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: Optional[int] = Field(default=None, foreign_key="app_user.id", index=True)
     merchant_pattern: str = Field(index=True)
     primary: str
     subcategory: str
