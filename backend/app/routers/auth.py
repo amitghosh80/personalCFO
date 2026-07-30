@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr, field_validator
 from sqlmodel import Session, select
 
@@ -9,9 +11,11 @@ from ..models.insight import Insight
 from ..models.merchant_rule import MerchantRule
 from ..models.transaction import Transaction
 from ..models.user import User
+from ..rate_limit import limiter
 from ..services.auth import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+logger = logging.getLogger("personalcfo.auth")
 
 
 class SignupRequest(BaseModel):
@@ -46,7 +50,8 @@ def _claim_legacy_data(session: Session, user_id: int) -> None:
 
 
 @router.post("/signup")
-def signup(body: SignupRequest, session: Session = Depends(get_session)):
+@limiter.limit("5/hour")
+def signup(request: Request, body: SignupRequest, session: Session = Depends(get_session)):
     email = body.email.lower()
     existing = session.exec(select(User).where(User.email == email)).first()
     if existing:
@@ -64,17 +69,21 @@ def signup(body: SignupRequest, session: Session = Depends(get_session)):
     session.commit()
     session.refresh(user)
 
+    logger.info(f"signup user_id={user.id}")
     token = create_access_token(user.id)
     return {"access_token": token, "token_type": "bearer", "user": _user_out(user)}
 
 
 @router.post("/login")
-def login(body: LoginRequest, session: Session = Depends(get_session)):
+@limiter.limit("10/minute")
+def login(request: Request, body: LoginRequest, session: Session = Depends(get_session)):
     email = body.email.lower()
     user = session.exec(select(User).where(User.email == email)).first()
     if not user or not verify_password(body.password, user.hashed_password):
+        logger.info("login failed")
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
+    logger.info(f"login user_id={user.id}")
     token = create_access_token(user.id)
     return {"access_token": token, "token_type": "bearer", "user": _user_out(user)}
 

@@ -127,7 +127,7 @@ export default function TransactionTable({
     transactions.forEach((t) => {
       if (t.transaction_type === "debit" && t.expense_category) present.add(t.expense_category);
     });
-    return [...present].sort((a, b) =>
+    return Array.from(present).sort((a, b) =>
       (EXPENSE_LABELS[a] ?? a).localeCompare(EXPENSE_LABELS[b] ?? b)
     );
   }, [transactions]);
@@ -136,7 +136,7 @@ export default function TransactionTable({
   const monthOptions = useMemo(() => {
     const present = new Set<string>();
     transactions.forEach((t) => present.add(t.date.slice(0, 7)));
-    return [...present].sort().reverse();
+    return Array.from(present).sort().reverse();
   }, [transactions]);
 
   const hasFilters =

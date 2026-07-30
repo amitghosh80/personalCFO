@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 60 * 24 * 30  # 30 days
     # Comma-separated list of extra allowed CORS origins (prod frontend domain).
     allowed_origins: str = ""
+    sentry_dsn: str = ""
+    environment: str = "development"
 
     class Config:
         env_file = ".env"

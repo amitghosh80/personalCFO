@@ -22,6 +22,7 @@ Available gstack skills: `/office-hours`, `/plan-ceo-review`, `/plan-eng-review`
 # From backend/
 .venv\Scripts\activate
 pip install -r requirements.txt   # first time
+alembic upgrade head              # first time and after pulling schema changes
 uvicorn app.main:app --reload     # runs on http://localhost:8000
 ```
 
@@ -30,6 +31,8 @@ Generate an encryption key (required before first run):
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 Copy the output into `backend/.env` as `ENCRYPTION_KEY=...`.
+
+Schema is owned by Alembic (`backend/alembic/`), not `SQLModel.metadata.create_all`. After changing a model, run `alembic revision --autogenerate -m "..."` and review the generated migration before committing it (migrations must stay dialect-agnostic — SQLite locally, Postgres in production — `env.py` already runs in batch mode for this).
 
 ### Frontend (Next.js)
 ```powershell

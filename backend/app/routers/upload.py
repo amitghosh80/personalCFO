@@ -1,8 +1,9 @@
 import hashlib
+import logging
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile, Depends
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Request, UploadFile, Depends
 from sqlmodel import Session
 
 from ..database import get_session, get_engine
@@ -12,6 +13,7 @@ from ..models.transaction import Transaction, TransactionType
 from ..models.user import User
 from ..parsers.csv_parser import parse_csv
 from ..parsers.pdf_parser import parse_pdf
+from ..rate_limit import limiter
 from ..services.duplicate_detector import (
     is_duplicate,
     file_already_imported,
@@ -24,6 +26,7 @@ from ..services.transfer_detector import detect_and_mark
 from ..config import get_settings
 
 router = APIRouter(prefix="/api", tags=["upload"])
+logger = logging.getLogger("personalcfo.upload")
 
 
 def _is_pdf(content: bytes) -> bool:
@@ -47,11 +50,13 @@ def _run_ai_categorization(user_id: int, job_id: str) -> None:
         try:
             categorize_job(session, user_id, job_id)
         except Exception:
-            pass  # never crash the worker; rows stay in the uncategorized queue
+            logger.exception(f"ai categorization failed job_id={job_id}")
 
 
 @router.post("/upload")
+@limiter.limit("10/minute")
 async def upload_statements(
+    request: Request,
     background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
     session: Session = Depends(get_session),
@@ -61,6 +66,7 @@ async def upload_statements(
     max_bytes = settings.max_upload_size_mb * 1024 * 1024
 
     job_id = str(uuid.uuid4())
+    logger.info(f"upload started user_id={current_user.id} file_count={len(files)}")
     job = ImportJob(id=job_id, user_id=current_user.id, file_count=len(files), status=ImportStatus.processing)
     session.add(job)
     session.flush()
@@ -195,6 +201,10 @@ async def upload_statements(
     job.completed_at = datetime.utcnow()
     session.add(job)
     session.commit()
+
+    logger.info(
+        f"upload completed job_id={job_id} status={job.status} txn_count={total_saved}"
+    )
 
     # AI categorization of the long tail runs after the response is sent.
     background_tasks.add_task(_run_ai_categorization, current_user.id, job_id)

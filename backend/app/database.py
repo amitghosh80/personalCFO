@@ -7,11 +7,9 @@ _engine = None
 def get_engine():
     global _engine
     if _engine is None:
-        _engine = create_engine(
-            get_settings().database_url,
-            connect_args={"check_same_thread": False},
-            echo=False,
-        )
+        url = get_settings().database_url
+        connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
+        _engine = create_engine(url, connect_args=connect_args, echo=False)
     return _engine
 
 
