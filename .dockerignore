@@ -1,0 +1,14 @@
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/*.db-journal
+**/*.log
+**/__pycache__/
+**/*.pyc
+backend/.venv/
+backend/tests/
+backend/.env
+frontend/
+docs/
+specs/
+.git/
