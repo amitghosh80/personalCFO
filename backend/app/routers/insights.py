@@ -9,7 +9,7 @@ from ..dependencies import get_current_user
 from ..models.import_job import ImportJob
 from ..models.insight import Insight
 from ..models.user import User
-from ..services.insight_engine import generate_insights
+from ..services.insight_engine import generate_insights, dashboard_insights, latest_ledger_insights
 
 router = APIRouter(prefix="/api", tags=["insights"])
 
@@ -51,6 +51,28 @@ def trigger_insights(
         "insights_generated": len(new),
         "insight_ids": [i.id for i in new],
     }
+
+
+@router.get("/import/{job_id}/dashboard-insights")
+def get_dashboard_insights(
+    job_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Top-3 proactive insights for the per-import summary page (AMI-48)."""
+    job = session.get(ImportJob, job_id)
+    if not job or job.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Import job not found")
+    return {"insights": dashboard_insights(session, current_user.id, job_id)}
+
+
+@router.get("/summary/insights")
+def get_summary_insights(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Top-3 proactive insights for the whole-ledger 'View import' page (AMI-48)."""
+    return {"insights": latest_ledger_insights(session, current_user.id)}
 
 
 @router.get("/insights")

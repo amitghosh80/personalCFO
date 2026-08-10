@@ -1,6 +1,7 @@
 import type {
   ChatMessage,
   ChatResponse,
+  DashboardInsight,
   ImportSummary,
   MerchantRule,
   Observation,
@@ -216,4 +217,16 @@ export async function getObservations(jobId: string): Promise<Observation[]> {
   const res = await apiFetch(`/api/import/${jobId}/observations`);
   const body = await handleResponse<{ observations: Observation[] }>(res);
   return body.observations;
+}
+
+export async function getDashboardInsights(jobId: string): Promise<DashboardInsight[]> {
+  const res = await apiFetch(`/api/import/${jobId}/dashboard-insights`);
+  const body = await handleResponse<{ insights: DashboardInsight[] }>(res);
+  return body.insights;
+}
+
+export async function getSummaryInsights(): Promise<DashboardInsight[]> {
+  const res = await apiFetch(`/api/summary/insights`);
+  const body = await handleResponse<{ insights: DashboardInsight[] }>(res);
+  return body.insights;
 }

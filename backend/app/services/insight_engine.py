@@ -11,7 +11,15 @@ from sqlmodel import Session, select
 from ..models.insight import Insight, InsightType, Severity
 from ..models.transaction import Transaction, TransactionType
 from ..services.expense_categorizer import CATEGORY_DISPLAY
-from ..services.analytics import load_ledger, cashflow_summary, is_transfer as _is_transfer
+from ..services.analytics import (
+    load_ledger,
+    cashflow_summary,
+    income_summary,
+    spending_by_category,
+    compare_periods,
+    recurring_charges,
+    is_transfer as _is_transfer,
+)
 
 _load_txns = load_ledger
 
@@ -992,6 +1000,214 @@ def proactive_observations(session: Session, user_id: int, job_id: str) -> list[
         observations.append({"kind": "anomaly", "title": dup["title"], "text": dup["explanation"]})
 
     return observations[:3]
+
+
+# ─── Dashboard insights (AMI-48) ──────────────────────────────────────────────
+#
+# Top-3 proactive insights for the per-import summary page, picked from 5
+# candidate types. Unlike the anomaly detectors above, these are always-computed
+# current-state metrics (not gated on crossing an anomaly threshold) except where
+# the ticket names an explicit threshold ("MoM change >20%", ">2x category
+# average"). Each candidate is built directly on analytics.py tool functions so
+# the cited numbers are the same ones the chatbot would return for the same
+# question — nothing here re-derives ledger math independently.
+
+_DASH_SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2}
+
+
+def _dash_top_category(session: Session, user_id: int, month: str, prior_month: Optional[str]) -> Optional[dict]:
+    cur = spending_by_category(session, user_id, {"month": month})
+    if not cur["by_primary"]:
+        return None
+    top = cur["by_primary"][0]
+    total = cur["total_spending"]
+    label = cur["period"]["label"]
+    top_pct = (top["amount"] / total * 100) if total else 0
+
+    pct_change = None
+    if prior_month:
+        cmp = compare_periods(session, user_id, {"month": prior_month}, {"month": month}, primary=top["category"])
+        pct_change = cmp["pct_change"]
+
+    if pct_change is not None:
+        delta = cmp["delta"]
+        direction = "up" if delta >= 0 else "down"
+        prior_label = cmp["period_a"]["label"]
+        title = f"{top['display']} is your top expense in {label}, {direction} {abs(pct_change):.0f}% from {prior_label}"
+        text = (f"You spent ${top['amount']:,.2f} on {top['display']} in {label} — {top_pct:.0f}% of your "
+                f"${total:,.2f} total spending, {direction} ${abs(delta):,.2f} from {prior_label}.")
+        severity = "high" if abs(pct_change) >= 75 else "medium" if abs(pct_change) >= 35 else "low"
+    else:
+        title = f"{top['display']} is your top expense in {label}"
+        text = (f"You spent ${top['amount']:,.2f} on {top['display']} in {label} — {top_pct:.0f}% of your "
+                f"${total:,.2f} total spending.")
+        severity = "medium" if top_pct >= 40 else "low"
+
+    return {
+        "type": "top_category_vs_prior",
+        "title": title,
+        "text": text,
+        "question": f"What's driving my {top['display']} spending in {label}?",
+        "severity": severity,
+    }
+
+
+def _dash_recurring(session: Session, user_id: int) -> Optional[dict]:
+    items = recurring_charges(session, user_id)["recurring"]
+    if not items:
+        return None
+    total = sum(r["typical_amount"] for r in items)
+    names = ", ".join(f"{r['merchant'].title()} (${r['typical_amount']:,.0f})" for r in items[:5])
+    more = "…" if len(items) > 5 else ""
+
+    title = f"${total:,.0f}/month in recurring charges across {len(items)} subscription{'s' if len(items) != 1 else ''}"
+    text = f"Recurring charges detected: {names}{more}. Total: ${total:,.2f}/month (${total * 12:,.2f}/year)."
+    severity = "high" if total >= 200 else "medium" if total >= 75 else "low"
+
+    return {
+        "type": "recurring_total",
+        "title": title,
+        "text": text,
+        "question": "What are all my recurring charges and subscriptions?",
+        "severity": severity,
+    }
+
+
+def _dash_unusual_large_txn(ledger: list[dict], month: str) -> Optional[dict]:
+    debits_by_cat: dict[str, list[dict]] = defaultdict(list)
+    for t in ledger:
+        if t["type"] == TransactionType.debit and not _is_transfer(t["description"]):
+            debits_by_cat[t.get("expense_category") or "other"].append(t)
+
+    cat_avg: dict[str, float] = {}
+    for cat, items in debits_by_cat.items():
+        if len(items) >= 3:
+            cat_avg[cat] = sum(t["amount"] for t in items) / len(items)
+
+    best: Optional[tuple] = None
+    best_ratio = 2.0
+    for t in ledger:
+        if t["month"] != month or t["type"] != TransactionType.debit or _is_transfer(t["description"]):
+            continue
+        cat = t.get("expense_category") or "other"
+        avg = cat_avg.get(cat)
+        if not avg or avg <= 0:
+            continue
+        ratio = t["amount"] / avg
+        if ratio > best_ratio:
+            best_ratio = ratio
+            best = (t, avg, cat)
+
+    if not best:
+        return None
+    t, avg, cat = best
+    display = CATEGORY_DISPLAY.get(cat, cat.title())
+    merchant = _norm(t["description"]).title() or "Unknown merchant"
+
+    return {
+        "type": "unusual_large_transaction",
+        "title": f"Unusually large {display} expense: ${t['amount']:,.2f} at {merchant}",
+        "text": (f"A ${t['amount']:,.2f} charge at {merchant} on {t['date']} is {best_ratio:.1f}× "
+                 f"your average {display} transaction (${avg:,.2f})."),
+        "question": f"Tell me more about the ${t['amount']:,.2f} {merchant} charge.",
+        "severity": "high" if best_ratio >= 3 else "medium",
+    }
+
+
+def _dash_mom_change(session: Session, user_id: int, month: str, prior_month: Optional[str]) -> Optional[dict]:
+    if not prior_month:
+        return None
+    cmp = compare_periods(session, user_id, {"month": prior_month}, {"month": month})
+    pct = cmp["pct_change"]
+    if pct is None or abs(pct) < 20:
+        return None
+
+    direction = "up" if pct >= 0 else "down"
+    change_word = "increase" if pct >= 0 else "decrease"
+    label = cmp["period_b"]["label"]
+    prior_label = cmp["period_a"]["label"]
+    severity = "high" if abs(pct) >= 75 else "medium" if abs(pct) >= 35 else "low"
+
+    return {
+        "type": "mom_spending_change",
+        "title": f"Overall spending {direction} {abs(pct):.0f}% in {label}",
+        "text": (f"You spent ${cmp['period_b']['total']:,.2f} in {label}, compared to "
+                 f"${cmp['period_a']['total']:,.2f} in {prior_label} — a {abs(pct):.0f}% {change_word}."),
+        "question": f"Why did my spending change so much in {label}?",
+        "severity": severity,
+    }
+
+
+def _dash_savings_rate(session: Session, user_id: int, month: str) -> Optional[dict]:
+    income = income_summary(session, user_id, {"month": month})["total_income"]
+    if income <= 0:
+        return None
+    spend_info = spending_by_category(session, user_id, {"month": month})
+    spend = spend_info["total_spending"]
+    label = spend_info["period"]["label"]
+    rate = (income - spend) / income * 100
+
+    if rate >= 0:
+        title = f"You saved {rate:.0f}% of your income in {label}"
+        text = f"You earned ${income:,.2f} and spent ${spend:,.2f} in {label} — a savings rate of {rate:.0f}%."
+        severity = "low" if rate >= 20 else "medium"
+    else:
+        title = f"You spent more than you earned in {label}"
+        text = f"You earned ${income:,.2f} but spent ${spend:,.2f} in {label} — {abs(rate):.0f}% over income."
+        severity = "high"
+
+    return {
+        "type": "savings_rate",
+        "title": title,
+        "text": text,
+        "question": "How can I improve my savings rate?",
+        "severity": severity,
+    }
+
+
+def dashboard_insights(session: Session, user_id: int, job_id: str, limit: int = 3) -> list[dict]:
+    """Top proactive insights for the per-import summary page. Computed fresh on
+    each call (no persistence) — see AMI-48."""
+    job_rows = session.exec(
+        select(Transaction)
+        .where(Transaction.user_id == user_id)
+        .where(Transaction.import_job_id == job_id)
+        .where(Transaction.is_duplicate == False)   # noqa: E712
+        .where(Transaction.is_ambiguous == False)    # noqa: E712
+    ).all()
+    if not job_rows:
+        return []
+    month = max(r.date.strftime("%Y-%m") for r in job_rows)
+    ledger = _load_txns(session, user_id)
+    return _insights_for_month(session, user_id, ledger, month, limit)
+
+
+def latest_ledger_insights(session: Session, user_id: int, limit: int = 3) -> list[dict]:
+    """Top proactive insights for the whole-ledger 'View import' page, scoped to
+    the most recent month across every import rather than a single job — see
+    AMI-48."""
+    ledger = _load_txns(session, user_id)
+    if not ledger:
+        return []
+    month = max(t["month"] for t in ledger)
+    return _insights_for_month(session, user_id, ledger, month, limit)
+
+
+def _insights_for_month(session: Session, user_id: int, ledger: list[dict], month: str, limit: int) -> list[dict]:
+    all_months = sorted(set(t["month"] for t in ledger))
+    idx = all_months.index(month) if month in all_months else -1
+    prior_month = all_months[idx - 1] if idx > 0 else None
+
+    candidates = [c for c in (
+        _dash_top_category(session, user_id, month, prior_month),
+        _dash_recurring(session, user_id),
+        _dash_unusual_large_txn(ledger, month),
+        _dash_mom_change(session, user_id, month, prior_month),
+        _dash_savings_rate(session, user_id, month),
+    ) if c]
+
+    candidates.sort(key=lambda c: _DASH_SEVERITY_RANK[c["severity"]])
+    return [{k: v for k, v in c.items() if k != "severity"} for c in candidates[:limit]]
 
 
 def generate_insights(session: Session, user_id: int, job_id: str) -> list[Insight]:

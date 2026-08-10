@@ -204,3 +204,10 @@ export interface Observation {
   title: string;
   text: string;
 }
+
+export interface DashboardInsight {
+  type: string;
+  title: string;
+  text: string;
+  question: string;
+}

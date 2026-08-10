@@ -2,14 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getImportSummary } from "@/lib/api";
+import { getDashboardInsights, getImportSummary } from "@/lib/api";
 import StepNav from "@/components/StepNav";
 import MonthlyBreakdown, { fmt } from "@/components/MonthlyBreakdown";
-import type { ImportSummary as ImportSummaryType } from "@/lib/types";
+import InsightsPanel from "@/components/InsightsPanel";
+import type { DashboardInsight, ImportSummary as ImportSummaryType } from "@/lib/types";
 
 export default function ImportSummary({ jobId }: { jobId: string }) {
   const router = useRouter();
   const [summary, setSummary] = useState<ImportSummaryType | null>(null);
+  const [insights, setInsights] = useState<DashboardInsight[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,6 +20,8 @@ export default function ImportSummary({ jobId }: { jobId: string }) {
       .then(setSummary)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+    // Best-effort: proactive insights are progressive enhancement, never block the page.
+    getDashboardInsights(jobId).then(setInsights).catch(() => {});
   }, [jobId]);
 
   if (loading) return <div className="text-gray-500">Loading summary…</div>;
@@ -36,6 +40,8 @@ export default function ImportSummary({ jobId }: { jobId: string }) {
             : ""}
         </p>
       </div>
+
+      <InsightsPanel jobId={jobId} insights={insights} />
 
       <div className="mb-6">
         <MonthlyBreakdown

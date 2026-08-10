@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { getLedgerSummary } from "@/lib/api";
+import { getLedgerSummary, getSummaryInsights } from "@/lib/api";
 import MonthlyBreakdown from "@/components/MonthlyBreakdown";
-import type { LedgerSummary as LedgerSummaryType } from "@/lib/types";
+import InsightsPanel from "@/components/InsightsPanel";
+import type { DashboardInsight, LedgerSummary as LedgerSummaryType } from "@/lib/types";
 
 /**
  * The "View import" dashboard: spending by category, month by month, across
@@ -13,6 +14,7 @@ import type { LedgerSummary as LedgerSummaryType } from "@/lib/types";
  */
 export default function LedgerSummary() {
   const [summary, setSummary] = useState<LedgerSummaryType | null>(null);
+  const [insights, setInsights] = useState<DashboardInsight[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,6 +23,8 @@ export default function LedgerSummary() {
       .then(setSummary)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+    // Best-effort: proactive insights are progressive enhancement, never block the page.
+    getSummaryInsights().then(setInsights).catch(() => {});
   }, []);
 
   if (loading) return <div className="text-gray-500">Loading summary…</div>;
@@ -40,6 +44,8 @@ export default function LedgerSummary() {
             : ""}
         </p>
       </div>
+
+      <InsightsPanel insights={insights} />
 
       <MonthlyBreakdown
         rows={summary.monthly_breakdown}

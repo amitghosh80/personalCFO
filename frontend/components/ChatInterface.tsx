@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { getObservations, getStarterQuestions, sendChatMessage } from "@/lib/api";
@@ -46,7 +46,13 @@ function coverageText(c: DataCoverage): string | null {
   return `Based on your ${c.date_range.from} – ${c.date_range.to} data from ${accounts}.`;
 }
 
-export default function ChatInterface({ jobId }: { jobId?: string }) {
+export default function ChatInterface({
+  jobId,
+  initialMessage,
+}: {
+  jobId?: string;
+  initialMessage?: string;
+}) {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -82,6 +88,15 @@ export default function ChatInterface({ jobId }: { jobId?: string }) {
       setLoading(false);
     }
   }
+
+  const firedInitial = useRef(false);
+  useEffect(() => {
+    if (initialMessage && !firedInitial.current) {
+      firedInitial.current = true;
+      ask(initialMessage);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialMessage]);
 
   const showStarters = !loading && starters.length > 0;
 
