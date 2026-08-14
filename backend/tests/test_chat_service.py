@@ -97,6 +97,32 @@ def test_system_prompt_includes_data_coverage_range(make_txn):
     assert "2026-04-05" in system_arg
 
 
+def test_history_is_truncated_to_recent_turns(make_txn):
+    """Older turns are dropped before the call so a long conversation doesn't
+    grow request cost unboundedly (AMI cost-control)."""
+    s = make_txn.__self_session__
+    client = FakeClient([
+        SimpleNamespace(stop_reason="end_turn", content=[_text_block("ok")]),
+    ])
+    long_history = [
+        {"role": "user" if i % 2 == 0 else "assistant", "content": f"turn {i}"}
+        for i in range(30)
+    ]
+
+    chat_service.answer_question(
+        s, TEST_USER_ID, "what now?", long_history, client=client, model="m", today=TODAY)
+
+    # FakeClient stores `messages` by reference, and the loop appends the
+    # assistant's own reply to that same list after the call completes — so
+    # inspect only the slice that was actually sent, not the mutated tail.
+    sent_messages = client.calls[0]["messages"][:21]
+    # Last 20 history messages + the new question.
+    assert len(sent_messages) == 21
+    assert sent_messages[0]["content"] == "turn 10"
+    assert sent_messages[-2]["content"] == "turn 29"
+    assert sent_messages[-1]["content"] == "what now?"
+
+
 def test_system_prompt_handles_empty_ledger(make_txn):
     """No imported data: prompt should still build (no coverage range crash)."""
     s = make_txn.__self_session__

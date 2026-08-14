@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     ai_categorizer_model: str = "claude-haiku-4-5"
     chat_model: str = "claude-sonnet-4-6"
+    chat_daily_limit: int = 50  # max /api/chat requests per user per day
     jwt_secret: str = ""
     jwt_expire_minutes: int = 60 * 24 * 30  # 30 days
     # Comma-separated list of extra allowed CORS origins (prod frontend domain).

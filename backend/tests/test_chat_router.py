@@ -63,3 +63,23 @@ def test_chat_endpoint_502_on_upstream_error(session, monkeypatch):
         assert res.status_code == 502
     finally:
         app.dependency_overrides.clear()
+
+
+def test_chat_endpoint_429_after_daily_limit(session, monkeypatch):
+    def fake_answer(sess, user_id, question, history, **kwargs):
+        return {"answer": "ok", "tools_used": []}
+
+    monkeypatch.setattr(chat_router, "answer_question", fake_answer)
+    monkeypatch.setattr(chat_router, "get_settings", lambda: SimpleNamespace(chat_daily_limit=2))
+    _apply_overrides(session)
+    try:
+        client = TestClient(app)
+        for _ in range(2):
+            res = client.post("/api/chat", json={"question": "hi", "history": []})
+            assert res.status_code == 200
+
+        res = client.post("/api/chat", json={"question": "hi", "history": []})
+        assert res.status_code == 429
+        assert "limit" in res.json()["detail"].lower()
+    finally:
+        app.dependency_overrides.clear()

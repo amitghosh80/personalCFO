@@ -61,6 +61,9 @@ def _coverage_line(session: Session, user_id: int) -> str:
     )
 
 _MAX_TOKENS = 2048
+# Full history is resent on every call, so cost grows with conversation length
+# unless bounded. Keep only the most recent turns; older context is dropped.
+_MAX_HISTORY_MESSAGES = 20  # ~10 user/assistant exchanges
 
 
 def _build_client():
@@ -96,7 +99,8 @@ def answer_question(
         f"{_coverage_line(session, user_id)}\n\n{SYSTEM_PROMPT}"
     )
 
-    messages = list(history or []) + [{"role": "user", "content": question}]
+    trimmed_history = (history or [])[-_MAX_HISTORY_MESSAGES:]
+    messages = list(trimmed_history) + [{"role": "user", "content": question}]
     tools_used: list[dict] = []
     last_text = ""
 

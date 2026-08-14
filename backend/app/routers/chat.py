@@ -4,12 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlmodel import Session
 
+from ..config import get_settings
 from ..database import get_session
 from ..dependencies import get_current_user
 from ..models.user import User
 from ..rate_limit import limiter
 from ..services.analytics import data_coverage, starter_questions
 from ..services.chat_service import answer_question
+from ..services.chat_usage import ChatUsageLimitExceeded, check_and_record_usage
 
 router = APIRouter(prefix="/api", tags=["chat"])
 logger = logging.getLogger("personalcfo.chat")
@@ -36,6 +38,13 @@ def chat(
     current_user: User = Depends(get_current_user),
 ):
     logger.info(f"chat request user_id={current_user.id} message_length={len(req.question)}")
+    try:
+        check_and_record_usage(session, current_user.id, get_settings().chat_daily_limit)
+    except ChatUsageLimitExceeded as e:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Daily chat limit reached ({e.limit} messages/day). Try again tomorrow.",
+        )
     history = [{"role": m.role, "content": m.content} for m in req.history]
     try:
         result = answer_question(

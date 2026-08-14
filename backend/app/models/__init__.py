@@ -4,6 +4,7 @@ from .insight import Insight, InsightType, Severity
 from .merchant_category import MerchantCategoryCache
 from .merchant_rule import MerchantRule
 from .user import User
+from .chat_usage import ChatUsage
 
 __all__ = [
     "Transaction", "TransactionType", "IncomeCategory",
@@ -12,4 +13,5 @@ __all__ = [
     "MerchantCategoryCache",
     "MerchantRule",
     "User",
+    "ChatUsage",
 ]
