@@ -211,3 +211,10 @@ export interface DashboardInsight {
   text: string;
   question: string;
 }
+
+export type FeedbackCategory = "bug" | "feature" | "general";
+
+export interface FeedbackResponse {
+  id: number;
+  created_at: string;
+}

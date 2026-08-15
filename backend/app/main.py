@@ -12,6 +12,7 @@ from .routers import chat
 from .routers import categories
 from .routers import auth
 from .routers import health
+from .routers import feedback
 
 configure_logging()
 init_error_reporting(_get_settings())
@@ -44,3 +45,4 @@ app.include_router(transactions.router)
 app.include_router(insights.router)
 app.include_router(chat.router)
 app.include_router(categories.router)
+app.include_router(feedback.router)

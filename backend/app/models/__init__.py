@@ -5,6 +5,7 @@ from .merchant_category import MerchantCategoryCache
 from .merchant_rule import MerchantRule
 from .user import User
 from .chat_usage import ChatUsage
+from .feedback import Feedback
 
 __all__ = [
     "Transaction", "TransactionType", "IncomeCategory",
@@ -14,4 +15,5 @@ __all__ = [
     "MerchantRule",
     "User",
     "ChatUsage",
+    "Feedback",
 ]

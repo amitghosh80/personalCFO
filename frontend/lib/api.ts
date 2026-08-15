@@ -2,6 +2,8 @@ import type {
   ChatMessage,
   ChatResponse,
   DashboardInsight,
+  FeedbackCategory,
+  FeedbackResponse,
   ImportSummary,
   MerchantRule,
   Observation,
@@ -229,4 +231,19 @@ export async function getSummaryInsights(): Promise<DashboardInsight[]> {
   const res = await apiFetch(`/api/summary/insights`);
   const body = await handleResponse<{ insights: DashboardInsight[] }>(res);
   return body.insights;
+}
+
+// ─── Feedback ───────────────────────────────────────────────────────────────
+
+export async function submitFeedback(
+  category: FeedbackCategory,
+  message: string,
+  pageUrl?: string
+): Promise<FeedbackResponse> {
+  const res = await apiFetch("/api/feedback", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ category, message, page_url: pageUrl ?? null }),
+  });
+  return handleResponse<FeedbackResponse>(res);
 }
