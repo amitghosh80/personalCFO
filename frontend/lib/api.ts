@@ -72,6 +72,24 @@ export async function login(email: string, password: string): Promise<AuthRespon
   return handleResponse<AuthResponse>(res);
 }
 
+export async function forgotPassword(email: string): Promise<{ message: string }> {
+  const res = await fetch(`${API}/api/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  return handleResponse<{ message: string }>(res);
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+  const res = await fetch(`${API}/api/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+  return handleResponse<{ message: string }>(res);
+}
+
 export async function getMe(): Promise<AuthUser> {
   const res = await apiFetch("/api/auth/me");
   return handleResponse<AuthUser>(res);

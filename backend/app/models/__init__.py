@@ -6,6 +6,7 @@ from .merchant_rule import MerchantRule
 from .user import User
 from .chat_usage import ChatUsage
 from .feedback import Feedback
+from .password_reset_token import PasswordResetToken
 
 __all__ = [
     "Transaction", "TransactionType", "IncomeCategory",
@@ -16,4 +17,5 @@ __all__ = [
     "User",
     "ChatUsage",
     "Feedback",
+    "PasswordResetToken",
 ]

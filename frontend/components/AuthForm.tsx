@@ -62,6 +62,13 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
               className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             {isSignup && <p className="text-xs text-gray-400 mt-1">At least 8 characters.</p>}
+            {!isSignup && (
+              <p className="text-right mt-1">
+                <Link href="/forgot-password" className="text-xs text-blue-600 hover:text-blue-800">
+                  Forgot password?
+                </Link>
+              </p>
+            )}
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button

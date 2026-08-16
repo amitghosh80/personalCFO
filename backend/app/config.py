@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     allowed_origins: str = ""
     sentry_dsn: str = ""
     environment: str = "development"
+    # Forgot-password email delivery via Resend (https://resend.com).
+    resend_api_key: str = ""
+    email_from: str = "PersonalCFO <onboarding@resend.dev>"
+    # Base URL used to build password-reset links (prod: https://personalcfo.agency).
+    frontend_url: str = "http://localhost:3000"
 
     class Config:
         env_file = ".env"
