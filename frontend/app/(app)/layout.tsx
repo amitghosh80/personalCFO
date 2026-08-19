@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import IncomeBanner from "@/components/IncomeBanner";
+import DeleteImportsMenuItem from "@/components/DeleteImportsMenuItem";
 import { isAuthenticated, clearToken } from "@/lib/auth";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -51,6 +52,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <a href="/feedback" className="text-sm text-blue-600 hover:text-blue-800 transition-colors">
               Feedback
             </a>
+            <DeleteImportsMenuItem />
             <button
               onClick={handleLogout}
               className="text-sm text-gray-500 hover:text-gray-800 transition-colors"

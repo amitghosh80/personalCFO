@@ -6,6 +6,7 @@ from sqlmodel import Session, select
 from ..database import get_session
 from ..dependencies import get_current_user
 from ..models.import_job import ImportJob, ImportStatus
+from ..models.insight import Insight
 from ..models.transaction import IncomeCategory, Transaction, TransactionType
 from ..models.user import User
 from ..services.encryption import decrypt
@@ -262,6 +263,30 @@ def get_proactive_observations(
     from ..services.insight_engine import proactive_observations
     _require_job(session, current_user.id, job_id)
     return {"observations": proactive_observations(session, current_user.id, job_id)}
+
+
+@router.delete("/data")
+def clear_all_data(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Permanently delete every transaction, import job, and insight for the
+    current user so they can start their ledger over from scratch. Merchant
+    categorization rules are left in place since they're a learned preference,
+    not import data."""
+    txns = session.exec(select(Transaction).where(Transaction.user_id == current_user.id)).all()
+    jobs = session.exec(select(ImportJob).where(ImportJob.user_id == current_user.id)).all()
+    insights = session.exec(select(Insight).where(Insight.user_id == current_user.id)).all()
+
+    for row in (*txns, *jobs, *insights):
+        session.delete(row)
+    session.commit()
+
+    return {
+        "transactions_deleted": len(txns),
+        "import_jobs_deleted": len(jobs),
+        "insights_deleted": len(insights),
+    }
 
 
 def _require_job(session: Session, user_id: int, job_id: str) -> ImportJob:

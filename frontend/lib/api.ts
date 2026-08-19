@@ -251,6 +251,19 @@ export async function getSummaryInsights(): Promise<DashboardInsight[]> {
   return body.insights;
 }
 
+// ─── Account data ───────────────────────────────────────────────────────────
+
+export interface ClearDataResult {
+  transactions_deleted: number;
+  import_jobs_deleted: number;
+  insights_deleted: number;
+}
+
+export async function clearAllData(): Promise<ClearDataResult> {
+  const res = await apiFetch("/api/data", { method: "DELETE" });
+  return handleResponse<ClearDataResult>(res);
+}
+
 // ─── Feedback ───────────────────────────────────────────────────────────────
 
 export async function submitFeedback(

@@ -21,7 +21,17 @@ _INSTITUTION_KEYWORDS: dict[str, list[str]] = {
 _DATE_RE = re.compile(
     r"\b(\d{1,2}[/\-]\d{1,2}(?:[/\-]\d{2,4})?|\d{4}[/\-]\d{2}[/\-]\d{2})\b"
 )
-_AMOUNT_RE = re.compile(r"([\-\+]?\$?[\d,]+\.\d{2})")
+_AMOUNT_RE = re.compile(r"(\(?[\-\+]?\$?[\d,]+\.\d{2}\)?)")
+
+
+def _amount_to_float(raw: str) -> float:
+    """Parse a matched _AMOUNT_RE token, treating parens as negative — the
+    convention statements use to print a negative running balance (e.g. an
+    overdrawn account shows "(589.73)")."""
+    s = raw.strip().replace("$", "").replace(",", "")
+    if s.startswith("(") and s.endswith(")"):
+        return -float(s[1:-1])
+    return float(s)
 
 # Lines that are statement metadata/summaries, not individual transactions.
 # These often contain a date and dollar amount and would otherwise be parsed
@@ -42,6 +52,38 @@ _PAYMENT_ACK_RE = re.compile(
     r"payment\b[\s\-]+(thank\s+you|received|processed|applied|credit)",
     re.IGNORECASE,
 )
+
+# Section headers that mark the end of the transaction list. Checks-paid
+# tables and daily-balance grids both contain dates and dollar amounts that
+# the line fallback would otherwise misread as individual transactions, so
+# once one of these is seen the rest of the document is not scanned.
+_SECTION_END_RE = re.compile(
+    r"^(checks?\s+paid|daily\s+balance\s+summary|"
+    r"overdraft(\s+and\s+returned\s+item)?\s+fee\s+summary|"
+    r"messages?\s+and\s+notices|in\s+case\s+of\s+errors)",
+    re.IGNORECASE,
+)
+
+# The account's opening/closing balance line (e.g. "Beginning balance ...
+# 3,182.64"). Not a transaction, but its amount seeds the running-balance
+# sign heuristic in _parse_text_lines for the first real transaction line.
+_BALANCE_SEED_RE = re.compile(r"beginning\s+balance|ending\s+balance", re.IGNORECASE)
+
+_PAGE_FOOTER_RE = re.compile(r"^\d+\s+of\s+\d+$")
+
+
+def _looks_like_continuation(line: str) -> bool:
+    """A wrapped second line of a transaction description (e.g. the merchant
+    name printed below the date/type/amount row): no date, no amount, not a
+    page footer or section boundary, and in the same all-caps style banks
+    print transaction text in."""
+    line = line.strip()
+    if not line or _DATE_RE.search(line) or _AMOUNT_RE.search(line):
+        return False
+    if _SECTION_END_RE.search(line) or _SUMMARY_LINE_RE.search(line) or _PAGE_FOOTER_RE.match(line):
+        return False
+    letters = [c for c in line if c.isalpha()]
+    return bool(letters) and all(c.isupper() for c in letters)
 
 
 def _needs_pdf_sign_inversion(institution: Optional[str], full_text: str) -> bool:
@@ -64,9 +106,8 @@ def _needs_pdf_sign_inversion(institution: Optional[str], full_text: str) -> boo
         amounts = _AMOUNT_RE.findall(line)
         if not amounts:
             continue
-        raw = amounts[-1].replace("$", "").replace(",", "")
         try:
-            if float(raw) < 0:
+            if _amount_to_float(amounts[-1]) < 0:
                 return True
         except ValueError:
             pass
@@ -202,10 +243,33 @@ def _extract_table_amount(row, amount_idx, debit_idx, credit_idx, invert_sign: b
 def _parse_text_lines(text: str, invert_sign: bool = False) -> dict:
     transactions: list[dict] = []
     ambiguous: list[dict] = []
+    # Running balance carried across lines, used to infer debit vs. credit
+    # when a statement never prints an explicit +/- sign (see below).
+    prev_balance: Optional[float] = None
 
-    for line in text.splitlines():
-        line = line.strip()
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        i += 1
         if not line:
+            continue
+
+        # Once a checks-paid/daily-balance/legal section starts, nothing after
+        # it is a transaction — stop scanning entirely rather than misreading
+        # those tables' dates and dollar amounts as more transactions.
+        if _SECTION_END_RE.search(line):
+            break
+
+        # Not a transaction, but its amount seeds the running-balance sign
+        # heuristic below for the first real transaction line.
+        if _BALANCE_SEED_RE.search(line):
+            seed_amounts = _AMOUNT_RE.findall(line)
+            if seed_amounts:
+                try:
+                    prev_balance = _amount_to_float(seed_amounts[-1])
+                except ValueError:
+                    pass
             continue
 
         # Skip statement summary/metadata lines — they contain dates and dollar
@@ -226,34 +290,75 @@ def _parse_text_lines(text: str, invert_sign: bool = False) -> dict:
 
             # Amex foreign-currency rows print "<foreign> $<usd>": the USD charge
             # is $-prefixed and is the real transaction amount, not a running
-            # balance. When the last amount is $-prefixed and the prior one is not,
-            # take the USD figure. Otherwise, bank statements end each line with a
-            # running balance after the transaction amount, so when two or more
-            # amounts are present the last is the balance — use the second-to-last.
+            # balance — there's no trailing balance column on that line at all.
+            # Otherwise, bank statements end each line with a running balance
+            # after the transaction amount, so when two or more amounts are
+            # present the last is the balance — use the second-to-last as the
+            # transaction amount and keep the last as that line's balance.
+            line_balance_str: Optional[str] = None
             if len(amount_matches) >= 2:
                 if "$" in amount_matches[-1] and "$" not in amount_matches[-2]:
                     txn_amount_str = amount_matches[-1]
                 else:
                     txn_amount_str = amount_matches[-2]
+                    line_balance_str = amount_matches[-1]
             else:
                 txn_amount_str = amount_matches[-1]
-            raw_amount = txn_amount_str.replace("$", "").replace(",", "")
-            value = float(raw_amount)
+            value = _amount_to_float(txn_amount_str)
+            has_explicit_sign = txn_amount_str.strip().startswith(("-", "+", "("))
 
             if invert_sign:
                 value = -value
+
+            line_balance: Optional[float] = None
+            if line_balance_str is not None:
+                try:
+                    line_balance = _amount_to_float(line_balance_str)
+                except ValueError:
+                    line_balance = None
+
+            # Direction: trust an explicit sign (or a profile's invert_sign)
+            # first. Otherwise, when this line carries a running balance and we
+            # know the prior one, a balance that dropped means a debit and a
+            # balance that rose means a credit — needed for statements (like
+            # this one) that print every amount as a plain positive number and
+            # convey direction only via column position, which plain-text
+            # extraction loses. Falls back to the old (credit-by-default)
+            # behavior when neither signal is available.
+            if has_explicit_sign or invert_sign:
+                is_debit = value < 0
+            elif line_balance is not None and prev_balance is not None and abs(line_balance - prev_balance) >= 0.005:
+                is_debit = line_balance < prev_balance
+            else:
+                is_debit = value < 0
+
+            if line_balance is not None:
+                prev_balance = line_balance
 
             desc_start = date_match.end()
             txn_amount_pos = line.rfind(txn_amount_str)
             description = line[desc_start:txn_amount_pos].strip() if txn_amount_pos > desc_start else line.strip()
             if not description:
                 description = line
+            # A second "Date Posted" column leaves its own date token stuck to
+            # the front of the description slice above — drop it.
+            description = re.sub(r"^\d{1,2}[/\-]\d{1,2}(?:[/\-]\d{2,4})?\s+", "", description)
+
+            # Bank statements often wrap the merchant name onto the line below
+            # the date/amount row — pull those continuation lines back in so
+            # the merchant isn't lost.
+            extra_lines = []
+            while i < len(lines) and _looks_like_continuation(lines[i]):
+                extra_lines.append(lines[i].strip())
+                i += 1
+            if extra_lines:
+                description = f"{description} {' '.join(extra_lines)}".strip()
 
             transactions.append({
                 "date": parsed_date,
                 "description": description,
                 "amount": abs(value),
-                "transaction_type": TransactionType.debit if value < 0 else TransactionType.credit,
+                "transaction_type": TransactionType.debit if is_debit else TransactionType.credit,
                 "currency": "USD",
             })
         except Exception as e:

@@ -204,8 +204,9 @@ export default function FileUploader() {
               {status !== "uploading" && (
                 <button
                   onClick={() => removeFile(id)}
-                  className="text-gray-300 hover:text-red-500 transition-colors ml-4 text-lg leading-none"
+                  className="shrink-0 flex items-center justify-center h-6 w-6 rounded-full text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors ml-4 text-lg leading-none"
                   aria-label="Remove file"
+                  title="Remove file"
                 >
                   ×
                 </button>
