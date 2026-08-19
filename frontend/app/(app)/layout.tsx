@@ -30,7 +30,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <IncomeBanner />
       <nav className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <a href="/app" className="text-lg font-bold text-gray-900 tracking-tight">
+          <a href="/" className="text-lg font-bold text-gray-900 tracking-tight">
             PersonalCFO
           </a>
           <div className="flex items-center gap-5">
