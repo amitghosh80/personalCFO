@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     chat_daily_limit: int = 50  # max /api/chat requests per user per day
     jwt_secret: str = ""
     jwt_expire_minutes: int = 60 * 24 * 30  # 30 days
+    # OAuth client ID from Google Cloud Console — verifies the audience of
+    # Google Sign-In ID tokens. Empty disables the /api/auth/google endpoint.
+    google_client_id: str = ""
     # Comma-separated list of extra allowed CORS origins (prod frontend domain).
     allowed_origins: str = ""
     sentry_dsn: str = ""

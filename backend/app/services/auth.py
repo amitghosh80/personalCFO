@@ -4,11 +4,15 @@ from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as google_id_token
 from sqlmodel import Session, select
 
 from ..config import get_settings
 from ..models.password_reset_token import PasswordResetToken
 from ..models.user import User
+
+_google_request = google_requests.Request()
 
 RESET_TOKEN_TTL_MINUTES = 30
 
@@ -81,3 +85,27 @@ def consume_reset_token(session: Session, raw_token: str) -> User | None:
     token.used_at = datetime.utcnow()
     session.add(token)
     return session.get(User, token.user_id)
+
+
+class GoogleTokenError(Exception):
+    pass
+
+
+def verify_google_id_token(credential: str) -> dict:
+    """Verifies a Google Identity Services ID token and returns its payload.
+
+    Checks the signature, expiry, and that the audience matches our own
+    configured OAuth client ID (so a token issued for a different app can't
+    be replayed here). Raises GoogleTokenError on any failure."""
+    settings = get_settings()
+    if not settings.google_client_id:
+        raise GoogleTokenError("Google sign-in is not configured")
+    try:
+        payload = google_id_token.verify_oauth2_token(
+            credential, _google_request, settings.google_client_id
+        )
+    except ValueError as e:
+        raise GoogleTokenError(str(e))
+    if not payload.get("email_verified"):
+        raise GoogleTokenError("Google account email is not verified")
+    return payload

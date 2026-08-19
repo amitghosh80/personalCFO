@@ -14,10 +14,12 @@ from ..models.transaction import Transaction
 from ..models.user import User
 from ..rate_limit import limiter
 from ..services.auth import (
+    GoogleTokenError,
     consume_reset_token,
     create_access_token,
     create_reset_token,
     hash_password,
+    verify_google_id_token,
     verify_password,
 )
 from ..services.email import send_password_reset_email
@@ -41,6 +43,10 @@ class SignupRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+
+class GoogleAuthRequest(BaseModel):
+    credential: str  # Google Identity Services ID token (JWT)
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -103,11 +109,45 @@ def signup(request: Request, body: SignupRequest, session: Session = Depends(get
 def login(request: Request, body: LoginRequest, session: Session = Depends(get_session)):
     email = body.email.lower()
     user = session.exec(select(User).where(User.email == email)).first()
-    if not user or not verify_password(body.password, user.hashed_password):
+    if not user or not user.hashed_password or not verify_password(body.password, user.hashed_password):
         logger.info("login failed")
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     logger.info(f"login user_id={user.id}")
+    token = create_access_token(user.id)
+    return {"access_token": token, "token_type": "bearer", "user": _user_out(user)}
+
+
+@router.post("/google")
+@limiter.limit("20/minute")
+def google_signin(request: Request, body: GoogleAuthRequest, session: Session = Depends(get_session)):
+    try:
+        payload = verify_google_id_token(body.credential)
+    except GoogleTokenError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+    google_sub = payload["sub"]
+    email = payload["email"].lower()
+
+    user = session.exec(select(User).where(User.google_sub == google_sub)).first()
+    if not user:
+        # Same email as an existing password account — Google has already
+        # verified ownership of that address, so link rather than duplicate.
+        user = session.exec(select(User).where(User.email == email)).first()
+        if user:
+            user.google_sub = google_sub
+        else:
+            is_first_user = session.exec(select(User)).first() is None
+            user = User(email=email, hashed_password=None, google_sub=google_sub)
+            session.add(user)
+            session.flush()
+            if is_first_user:
+                _claim_legacy_data(session, user.id)
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
+    logger.info(f"google signin user_id={user.id}")
     token = create_access_token(user.id)
     return {"access_token": token, "token_type": "bearer", "user": _user_out(user)}
 

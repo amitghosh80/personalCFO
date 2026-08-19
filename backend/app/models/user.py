@@ -8,5 +8,7 @@ class User(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     email: str = Field(unique=True, index=True)
-    hashed_password: str
+    # None for accounts created via Google Sign-In that never set a password.
+    hashed_password: Optional[str] = Field(default=None)
+    google_sub: Optional[str] = Field(default=None, unique=True, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)

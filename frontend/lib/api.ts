@@ -72,6 +72,15 @@ export async function login(email: string, password: string): Promise<AuthRespon
   return handleResponse<AuthResponse>(res);
 }
 
+export async function signInWithGoogle(credential: string): Promise<AuthResponse> {
+  const res = await fetch(`${API}/api/auth/google`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ credential }),
+  });
+  return handleResponse<AuthResponse>(res);
+}
+
 export async function forgotPassword(email: string): Promise<{ message: string }> {
   const res = await fetch(`${API}/api/auth/forgot-password`, {
     method: "POST",

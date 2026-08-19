@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { login, signup } from "@/lib/api";
 import { setToken } from "@/lib/auth";
+import GoogleSignInButton from "@/components/GoogleSignInButton";
 
 export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const router = useRouter();
@@ -38,6 +39,7 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
         <p className="text-gray-500 mb-6">
           {isSignup ? "Start tracking your finances with personalCFO." : "Sign in to continue."}
         </p>
+        <GoogleSignInButton setError={setError} />
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
