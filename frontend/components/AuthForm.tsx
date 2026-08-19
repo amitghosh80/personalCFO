@@ -38,6 +38,11 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
         <p className="text-gray-500 mb-6">
           {isSignup ? "Start tracking your finances with personalCFO." : "Sign in to continue."}
         </p>
+        {isSignup && (
+          <p className="text-xs text-gray-500 mb-6 -mt-2">
+            No bank credentials required · Encrypted at rest.
+          </p>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
