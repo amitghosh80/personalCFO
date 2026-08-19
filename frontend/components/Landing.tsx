@@ -192,7 +192,23 @@ export default function Landing() {
                 See how it works
               </a>
             </div>
-            <p className="mt-4 text-sm text-gray-400">No bank credentials required · Encrypted at rest.</p>
+            <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2">
+              <svg
+                className="h-4 w-4 shrink-0 text-blue-600"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M10 1a4 4 0 0 0-4 4v2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1V5a4 4 0 0 0-4-4Zm2 6V5a2 2 0 1 0-4 0v2h4Z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              <span className="text-sm font-semibold text-blue-800">
+                No bank credentials required · Encrypted at rest.
+              </span>
+            </div>
           </div>
 
           {/* Hero visuals: product mockups showing what the system produces —
