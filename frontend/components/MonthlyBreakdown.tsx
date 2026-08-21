@@ -57,6 +57,33 @@ function totals(rows: MonthlyRow[]) {
 
 const VISIBLE_CATEGORIES = 5;
 
+function IncomeBars({ row }: { row: MonthlyRow }) {
+  const cats = row.income_by_category ?? [];
+  if (cats.length === 0) return null;
+  const max = Math.max(...cats.map((c) => c.amount), 1);
+  return (
+    <div className="px-5 py-4 space-y-2 border-b border-gray-100">
+      <div className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-1">
+        Income breakdown
+      </div>
+      {cats.map((c) => (
+        <div key={c.category} className="flex items-center gap-3">
+          <div className="w-28 shrink-0 text-sm text-gray-600">
+            {c.display} <span className="text-gray-400">({c.count})</span>
+          </div>
+          <div className="flex-1 h-5 rounded bg-gray-100 overflow-hidden">
+            <div
+              className="h-full bg-green-500"
+              style={{ width: `${Math.max((c.amount / max) * 100, 2)}%` }}
+            />
+          </div>
+          <div className="w-24 shrink-0 text-right text-sm tabular-nums text-gray-700">{fmt(c.amount)}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function CategoryBars({ row }: { row: MonthlyRow }) {
   const [showAll, setShowAll] = useState(false);
   const all = row.top_categories ?? [];
@@ -172,6 +199,7 @@ export default function MonthlyBreakdown({
                 {isOpen && (
                   <tr className="bg-gray-50/60">
                     <td colSpan={4} className="border-t border-gray-100 p-0">
+                      <IncomeBars row={r} />
                       <CategoryBars row={r} />
                     </td>
                   </tr>

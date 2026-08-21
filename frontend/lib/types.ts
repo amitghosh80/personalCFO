@@ -69,6 +69,7 @@ export interface MonthlyRow {
   expenses: number;
   net: number;
   top_categories: CategoryBreakdown[];
+  income_by_category: IncomeCategoryBreakdown[];
 }
 
 // Primary keys mirror backend TAXONOMY in expense_categorizer.py.
