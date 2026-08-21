@@ -40,11 +40,24 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
           {isSignup ? "Start tracking your finances with personalCFO." : "Sign in to continue."}
         </p>
         {isSignup && (
-          <p className="text-xs text-gray-500 mb-6 -mt-2">
+          <p className="text-xs text-gray-500 mb-3 -mt-2">
             No bank credentials required · Encrypted at rest.
           </p>
         )}
         <GoogleSignInButton setError={setError} />
+        {isSignup && (
+          <p className="text-xs text-gray-400 mb-6 text-center">
+            By creating an account, you agree to our{" "}
+            <Link href="/terms" className="text-blue-600 hover:text-blue-800">
+              Terms
+            </Link>{" "}
+            and{" "}
+            <Link href="/privacy" className="text-blue-600 hover:text-blue-800">
+              Privacy Policy
+            </Link>
+            . personalCFO does not provide financial, tax, or legal advice.
+          </p>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>

@@ -117,9 +117,14 @@ export default function ChatInterface({
         )}
 
         {messages.length === 0 && observations.length === 0 && (
-          <p className="text-gray-400 text-sm text-center mt-8">
-            Ask about your finances — e.g. &ldquo;How much did I spend on dining last quarter?&rdquo;
-          </p>
+          <>
+            <p className="text-gray-400 text-sm text-center mt-8">
+              Ask about your finances — e.g. &ldquo;How much did I spend on dining last quarter?&rdquo;
+            </p>
+            <p className="text-gray-400 text-xs text-center mt-2">
+              Answers are generated from your imported data and are not financial, tax, or legal advice.
+            </p>
+          </>
         )}
 
         {messages.map((m, i) => (

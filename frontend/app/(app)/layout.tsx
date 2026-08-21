@@ -63,6 +63,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </nav>
       <main className="max-w-5xl mx-auto px-6 py-10">{children}</main>
+      <footer className="border-t border-gray-200 mt-10">
+        <div className="max-w-5xl mx-auto px-6 py-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs text-gray-400">
+          <p>
+            personalCFO does not provide financial, tax, or legal advice. Categorization and chat
+            answers can be inaccurate — verify anything important against your actual statements.
+          </p>
+          <div className="flex gap-4 shrink-0">
+            <a href="/terms" className="hover:text-gray-600 transition-colors">
+              Terms
+            </a>
+            <a href="/privacy" className="hover:text-gray-600 transition-colors">
+              Privacy
+            </a>
+          </div>
+        </div>
+      </footer>
     </>
   );
 }
