@@ -154,8 +154,8 @@ def answer_question(
 
         tool_results = []
         for tu in tool_uses:
-            tools_used.append({"name": tu.name, "input": tu.input})
             result = dispatch_tool(session, user_id, tu.name, tu.input, today=effective_today)
+            tools_used.append({"name": tu.name, "input": tu.input, "result": result})
             tool_results.append({
                 "type": "tool_result",
                 "tool_use_id": tu.id,

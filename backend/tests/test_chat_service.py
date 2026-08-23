@@ -45,7 +45,11 @@ def test_loop_runs_tool_then_returns_grounded_answer(make_txn):
         s, TEST_USER_ID, "How much did I spend in May?", [], client=client, model="m", today=TODAY)
 
     assert "100" in out["answer"]
-    assert out["tools_used"] == [{"name": "spending_by_category", "input": {"period": {"month": "2026-05"}}}]
+    assert len(out["tools_used"]) == 1
+    used = out["tools_used"][0]
+    assert used["name"] == "spending_by_category"
+    assert used["input"] == {"period": {"month": "2026-05"}}
+    assert used["result"]["total_spending"] == 100.0
     # Second call must include the tool_result the loop fed back.
     second_msgs = client.calls[1]["messages"]
     assert any(

@@ -194,6 +194,7 @@ export interface ChatMessage {
 export interface ChatToolUse {
   name: string;
   input: Record<string, unknown>;
+  result?: Record<string, unknown>;
 }
 
 export interface DataCoverage {
