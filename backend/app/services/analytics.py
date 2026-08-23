@@ -99,9 +99,7 @@ def monthly_summary(session: Session, user_id: int) -> dict:
     ledger = load_ledger(session, user_id)
     buckets: dict[str, dict] = defaultdict(lambda: {"income": 0.0, "expenses": 0.0})
     cat_buckets: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
-    income_cat_buckets: dict[str, dict[str, dict]] = defaultdict(
-        lambda: defaultdict(lambda: {"amount": 0.0, "count": 0})
-    )
+    income_txn_buckets: dict[str, list[dict]] = defaultdict(list)
     has_unreviewed = False
 
     for t in ledger:
@@ -120,8 +118,14 @@ def monthly_summary(session: Session, user_id: int) -> dict:
             buckets[month]["income"] += t["amount"]
             if t["income_confirmed"] is None:
                 has_unreviewed = True
-            income_cat_buckets[month][t["income_category"]]["amount"] += t["amount"]
-            income_cat_buckets[month][t["income_category"]]["count"] += 1
+            income_txn_buckets[month].append({
+                "id": t["id"],
+                "date": str(t["date"]),
+                "description": t["description"],
+                "amount": round(t["amount"], 2),
+                "category": t["income_category"],
+                "display": INCOME_DISPLAY.get(t["income_category"], t["income_category"].title()),
+            })
 
     def _top(month: str) -> list[dict]:
         # Ranked descending, not truncated — the frontend decides how many to show.
@@ -131,17 +135,8 @@ def monthly_summary(session: Session, user_id: int) -> dict:
             for c, a in ranked
         ]
 
-    def _top_income(month: str) -> list[dict]:
-        ranked = sorted(income_cat_buckets[month].items(), key=lambda kv: kv[1]["amount"], reverse=True)
-        return [
-            {
-                "category": c,
-                "display": INCOME_DISPLAY.get(c, c.title()),
-                "amount": round(v["amount"], 2),
-                "count": v["count"],
-            }
-            for c, v in ranked
-        ]
+    def _income_transactions(month: str) -> list[dict]:
+        return sorted(income_txn_buckets[month], key=lambda x: x["date"])
 
     monthly = [
         {
@@ -150,7 +145,7 @@ def monthly_summary(session: Session, user_id: int) -> dict:
             "expenses": round(d["expenses"], 2),
             "net": round(d["income"] - d["expenses"], 2),
             "top_categories": _top(m),
-            "income_by_category": _top_income(m),
+            "income_transactions": _income_transactions(m),
         }
         for m, d in sorted(buckets.items())
     ]

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useState } from "react";
 import Link from "next/link";
 import type { MonthlyRow } from "@/lib/types";
 
@@ -57,29 +57,28 @@ function totals(rows: MonthlyRow[]) {
 
 const VISIBLE_CATEGORIES = 5;
 
-function IncomeBars({ row }: { row: MonthlyRow }) {
-  const cats = row.income_by_category ?? [];
-  if (cats.length === 0) return null;
-  const max = Math.max(...cats.map((c) => c.amount), 1);
+function IncomeTransactions({ row }: { row: MonthlyRow }) {
+  const txns = row.income_transactions ?? [];
+  if (txns.length === 0) return null;
   return (
-    <div className="px-5 py-4 space-y-2 border-b border-gray-100">
-      <div className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-1">
-        Income breakdown
+    <div className="border-b border-gray-100">
+      <div className="px-5 pt-4 pb-1 text-xs font-medium uppercase tracking-wide text-gray-400">
+        Income transactions
       </div>
-      {cats.map((c) => (
-        <div key={c.category} className="flex items-center gap-3">
-          <div className="w-28 shrink-0 text-sm text-gray-600">
-            {c.display} <span className="text-gray-400">({c.count})</span>
+      <div className="divide-y divide-gray-100">
+        {txns.map((t) => (
+          <div key={t.id} className="px-5 py-2 flex items-center gap-3 text-sm">
+            <span className="w-12 shrink-0 text-xs text-gray-400 tabular-nums">{t.date.slice(5)}</span>
+            <span className="flex-1 min-w-0 text-gray-700 truncate" title={t.description}>
+              {t.description}
+            </span>
+            <span className="shrink-0 text-xs text-gray-400">{t.display}</span>
+            <span className="w-24 shrink-0 text-right tabular-nums text-green-700 font-medium">
+              {fmt(t.amount)}
+            </span>
           </div>
-          <div className="flex-1 h-5 rounded bg-gray-100 overflow-hidden">
-            <div
-              className="h-full bg-green-500"
-              style={{ width: `${Math.max((c.amount / max) * 100, 2)}%` }}
-            />
-          </div>
-          <div className="w-24 shrink-0 text-right text-sm tabular-nums text-gray-700">{fmt(c.amount)}</div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -145,12 +144,9 @@ export default function MonthlyBreakdown({
   rows: MonthlyRow[];
   emptyMessage?: string;
 }) {
+  // Collapsed by default — the user clicks the chevron to expand a month's
+  // income/expense breakdown.
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-
-  // Expand every month's category breakdown by default.
-  useEffect(() => {
-    setExpanded(new Set(rows.map((r) => r.month)));
-  }, [rows]);
 
   const toggle = (month: string) =>
     setExpanded((prev) => {
@@ -199,7 +195,7 @@ export default function MonthlyBreakdown({
                 {isOpen && (
                   <tr className="bg-gray-50/60">
                     <td colSpan={4} className="border-t border-gray-100 p-0">
-                      <IncomeBars row={r} />
+                      <IncomeTransactions row={r} />
                       <CategoryBars row={r} />
                     </td>
                   </tr>

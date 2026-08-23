@@ -63,13 +63,22 @@ export interface CategoryBreakdown {
   amount: number;
 }
 
+export interface IncomeTransaction {
+  id: number;
+  date: string;
+  description: string;
+  amount: number;
+  category: string;
+  display: string;
+}
+
 export interface MonthlyRow {
   month: string;      // "YYYY-MM"
   income: number;
   expenses: number;
   net: number;
   top_categories: CategoryBreakdown[];
-  income_by_category: IncomeCategoryBreakdown[];
+  income_transactions: IncomeTransaction[];
 }
 
 // Primary keys mirror backend TAXONOMY in expense_categorizer.py.

@@ -45,7 +45,7 @@ export default function LedgerSummary() {
         </p>
       </div>
 
-      <InsightsPanel insights={insights} />
+      <InsightsPanel insights={insights} layout="scroll" />
 
       <MonthlyBreakdown
         rows={summary.monthly_breakdown}

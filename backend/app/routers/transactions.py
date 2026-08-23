@@ -169,10 +169,8 @@ def get_import_summary(
     buckets: dict[str, dict] = defaultdict(lambda: {"income": 0.0, "expenses": 0.0})
     # month -> category -> total spent
     cat_buckets: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
-    # month -> income category -> {amount, count}
-    income_cat_buckets: dict[str, dict[str, dict]] = defaultdict(
-        lambda: defaultdict(lambda: {"amount": 0.0, "count": 0})
-    )
+    # month -> list of individual income transactions
+    income_txn_buckets: dict[str, list[dict]] = defaultdict(list)
     # income category -> {amount, count}, same shape as the chatbot's income_summary tool
     income_by_cat: dict[str, dict] = defaultdict(lambda: {"amount": 0.0, "count": 0})
     has_unreviewed = False
@@ -200,8 +198,14 @@ def get_import_summary(
             income_cat = t.income_category or "other"
             income_by_cat[income_cat]["amount"] += t.amount
             income_by_cat[income_cat]["count"] += 1
-            income_cat_buckets[key][income_cat]["amount"] += t.amount
-            income_cat_buckets[key][income_cat]["count"] += 1
+            income_txn_buckets[key].append({
+                "id": t.id,
+                "date": str(t.date),
+                "description": decrypt(t.description),
+                "amount": round(t.amount, 2),
+                "category": income_cat,
+                "display": INCOME_DISPLAY.get(income_cat, income_cat.title()),
+            })
             income_dates.append(t.date)
 
     def _top_categories(month: str) -> list[dict]:
@@ -216,17 +220,8 @@ def get_import_summary(
             for cat, amount in ranked
         ]
 
-    def _top_income_categories(month: str) -> list[dict]:
-        ranked = sorted(income_cat_buckets[month].items(), key=lambda kv: kv[1]["amount"], reverse=True)
-        return [
-            {
-                "category": cat,
-                "display": INCOME_DISPLAY.get(cat, cat.title()),
-                "amount": round(v["amount"], 2),
-                "count": v["count"],
-            }
-            for cat, v in ranked
-        ]
+    def _income_transactions(month: str) -> list[dict]:
+        return sorted(income_txn_buckets[month], key=lambda x: x["date"])
 
     monthly_breakdown = [
         {
@@ -235,7 +230,7 @@ def get_import_summary(
             "expenses": round(data["expenses"], 2),
             "net": round(data["income"] - data["expenses"], 2),
             "top_categories": _top_categories(month),
-            "income_by_category": _top_income_categories(month),
+            "income_transactions": _income_transactions(month),
         }
         for month, data in sorted(buckets.items())
     ]

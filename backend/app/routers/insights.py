@@ -71,8 +71,8 @@ def get_summary_insights(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Top-3 proactive insights for the whole-ledger 'View import' page (AMI-48)."""
-    return {"insights": latest_ledger_insights(session, current_user.id)}
+    """Top-5 proactive insights for the whole-ledger 'View import' page (AMI-48)."""
+    return {"insights": latest_ledger_insights(session, current_user.id, limit=5)}
 
 
 @router.get("/insights")
