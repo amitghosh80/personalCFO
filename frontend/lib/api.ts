@@ -4,6 +4,7 @@ import type {
   DashboardInsight,
   FeedbackCategory,
   FeedbackResponse,
+  FinancialProfile,
   ImportSummary,
   MerchantRule,
   Observation,
@@ -258,6 +259,11 @@ export async function getSummaryInsights(): Promise<DashboardInsight[]> {
   const res = await apiFetch(`/api/summary/insights`);
   const body = await handleResponse<{ insights: DashboardInsight[] }>(res);
   return body.insights;
+}
+
+export async function getFinancialProfile(): Promise<FinancialProfile> {
+  const res = await apiFetch(`/api/financial-profile`);
+  return handleResponse<FinancialProfile>(res);
 }
 
 // ─── Account data ───────────────────────────────────────────────────────────

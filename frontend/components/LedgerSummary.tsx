@@ -5,6 +5,8 @@ import Link from "next/link";
 import { getLedgerSummary, getSummaryInsights } from "@/lib/api";
 import MonthlyBreakdown from "@/components/MonthlyBreakdown";
 import InsightsPanel from "@/components/InsightsPanel";
+import FinancialProfile from "@/components/FinancialProfile";
+import SectionCard from "@/components/SectionCard";
 import type { DashboardInsight, LedgerSummary as LedgerSummaryType } from "@/lib/types";
 
 /**
@@ -45,18 +47,33 @@ export default function LedgerSummary() {
         </p>
       </div>
 
-      <InsightsPanel insights={insights} layout="scroll" />
+      <FinancialProfile />
 
-      <MonthlyBreakdown
-        rows={summary.monthly_breakdown}
-        emptyMessage="No transactions imported yet."
-      />
-
-      {summary.income_includes_unreviewed && (
-        <p className="text-xs text-gray-400 mt-3 px-1">
-          * Income includes auto-detected candidates not yet confirmed.
-        </p>
+      {insights.length > 0 && (
+        <SectionCard
+          title="Recent Insights"
+          description="Proactive patterns detected in your latest data."
+          accent="violet"
+        >
+          <InsightsPanel insights={insights} layout="scroll" />
+        </SectionCard>
       )}
+
+      <SectionCard
+        title="Income, Expenses & Net Cash Flow"
+        description="Per-month totals across every import."
+        accent="emerald"
+      >
+        <MonthlyBreakdown
+          rows={summary.monthly_breakdown}
+          emptyMessage="No transactions imported yet."
+        />
+        {summary.income_includes_unreviewed && (
+          <p className="text-xs text-gray-400 mt-3 px-1">
+            * Income includes auto-detected candidates not yet confirmed.
+          </p>
+        )}
+      </SectionCard>
 
       {empty && (
         <div className="mt-6">

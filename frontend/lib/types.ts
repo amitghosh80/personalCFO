@@ -223,6 +223,144 @@ export interface DashboardInsight {
   question: string;
 }
 
+// ─── Financial Profile (Flow 5: evergreen metrics) ────────────────────────────
+
+export interface CommitmentDetail {
+  merchant: string;
+  cadence: string;
+  amount_per_period: number;
+  monthly_equivalent: number;
+  next_expected_charge: string;
+  occurrences_detected: number;
+  supporting_transaction_ids: number[];
+  confidence: number;
+  confidence_label: ConfidenceLabel;
+  cadence_ambiguous: boolean;
+  category: string;
+}
+
+export interface CommittedMonthlySpendPayload {
+  committed_monthly_total: number;
+  committed_annualized_total: number;
+  commitment_count: number;
+  commitments: CommitmentDetail[];
+}
+
+export interface MonthlyDebitPoint {
+  month: string;
+  total_debits: number;
+}
+
+export interface AverageMonthlyBurnPayload {
+  burn_3mo: number;
+  burn_6mo: number | null;
+  month_to_date: number;
+  months_in_window: number;
+  monthly_series: MonthlyDebitPoint[];
+}
+
+export interface IncomeCategoryAvg {
+  income_category: string;
+  monthly_avg: number;
+}
+
+export interface IncomeSource {
+  source: string;
+  income_category: string;
+  cadence: string;
+  monthly_avg: number;
+  stability: "stable" | "variable";
+  supporting_transaction_ids: number[];
+}
+
+export interface MonthlyIncomePoint {
+  month: string;
+  confirmed_income: number;
+}
+
+export interface AverageMonthlyIncomePayload {
+  income_3mo: number;
+  income_6mo: number | null;
+  month_to_date: number;
+  months_in_window: number;
+  used_income_fallback: boolean;
+  by_category: IncomeCategoryAvg[];
+  sources: IncomeSource[];
+  monthly_series: MonthlyIncomePoint[];
+}
+
+export interface FixedBreakdownGroup {
+  group: string;
+  monthly_avg: number;
+}
+
+export interface FixedVsDiscretionaryPayload {
+  fixed_monthly_avg: number;
+  discretionary_monthly_avg: number;
+  fixed_pct: number;
+  burn_rate_floor: number;
+  fixed_breakdown: FixedBreakdownGroup[];
+}
+
+export interface SavingsRateMonthPoint {
+  month: string;
+  income: number;
+  spend: number;
+  rate: number;
+}
+
+export interface SavingsRatePayload {
+  savings_rate_3mo: number;
+  window_income_total: number;
+  window_spend_total: number;
+  window_net_total: number;
+  months_in_window: number;
+  used_income_fallback: boolean;
+  monthly_series: SavingsRateMonthPoint[];
+}
+
+export interface FeeBreakdown {
+  sub_type: string;
+  ytd_total: number;
+  transaction_count: number;
+}
+
+export interface FeesAndInterestPayload {
+  ytd_total: number;
+  trailing_12mo_total: number | null;
+  breakdown: FeeBreakdown[];
+  supporting_transaction_ids: number[];
+}
+
+export interface ProfileMetricOk<TPayload> {
+  status: "ok";
+  confidence: number;
+  confidence_label: ConfidenceLabel;
+  headline: string;
+  narrative: string;
+  payload: TPayload;
+}
+
+export interface ProfileMetricInsufficient {
+  status: "insufficient_data";
+  requirement: string;
+}
+
+export type ProfileMetric<TPayload> = ProfileMetricOk<TPayload> | ProfileMetricInsufficient;
+
+export interface FinancialProfile {
+  computed_at: string;
+  ledger_months_available: number;
+  metrics: {
+    committed_monthly_spend: ProfileMetric<CommittedMonthlySpendPayload>;
+    average_monthly_burn: ProfileMetric<AverageMonthlyBurnPayload>;
+    average_monthly_income: ProfileMetric<AverageMonthlyIncomePayload>;
+    fixed_vs_discretionary: ProfileMetric<FixedVsDiscretionaryPayload>;
+    savings_rate: ProfileMetric<SavingsRatePayload>;
+    fees_and_interest: ProfileMetric<FeesAndInterestPayload>;
+  };
+}
+
 export type FeedbackCategory = "bug" | "feature" | "general";
 
 export interface FeedbackResponse {
