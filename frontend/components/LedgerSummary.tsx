@@ -38,7 +38,7 @@ export default function LedgerSummary() {
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">Spending by month</h2>
+        <h2 className="text-2xl font-bold text-gray-900 mb-1">Financial Overview</h2>
         <p className="text-gray-500">
           {summary.total_transactions} transactions across all imports
           {summary.date_range.from && summary.date_range.to
