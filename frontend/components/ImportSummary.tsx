@@ -6,6 +6,8 @@ import { getDashboardInsights, getImportSummary } from "@/lib/api";
 import StepNav from "@/components/StepNav";
 import MonthlyBreakdown, { fmt } from "@/components/MonthlyBreakdown";
 import InsightsPanel from "@/components/InsightsPanel";
+import FinancialProfile from "@/components/FinancialProfile";
+import SectionCard from "@/components/SectionCard";
 import type { DashboardInsight, ImportSummary as ImportSummaryType } from "@/lib/types";
 
 export default function ImportSummary({ jobId }: { jobId: string }) {
@@ -41,14 +43,28 @@ export default function ImportSummary({ jobId }: { jobId: string }) {
         </p>
       </div>
 
-      <InsightsPanel jobId={jobId} insights={insights} />
+      <FinancialProfile />
 
-      <div className="mb-6">
+      {insights.length > 0 && (
+        <SectionCard
+          title="Recent Insights"
+          description="Proactive patterns detected in your latest data."
+          accent="violet"
+        >
+          <InsightsPanel jobId={jobId} insights={insights} />
+        </SectionCard>
+      )}
+
+      <SectionCard
+        title="Income, Expenses & Net Cash Flow"
+        description="Per-month totals across every import."
+        accent="emerald"
+      >
         <MonthlyBreakdown
           rows={summary.monthly_breakdown}
           emptyMessage="No transactions found for this import."
         />
-      </div>
+      </SectionCard>
 
       {/* Income summary — same figures the chatbot's income_summary tool returns */}
       {summary.income_by_category.length > 0 && (
