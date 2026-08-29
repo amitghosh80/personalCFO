@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import IncomeBanner from "@/components/IncomeBanner";
 import DeleteImportsMenuItem from "@/components/DeleteImportsMenuItem";
+import FeedbackButton from "@/components/FeedbackButton";
 import { isAuthenticated, clearToken } from "@/lib/auth";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -49,9 +50,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <a href="/chat" className="text-sm text-blue-600 hover:text-blue-800 transition-colors">
               Ask CFO
             </a>
-            <a href="/feedback" className="text-sm text-blue-600 hover:text-blue-800 transition-colors">
-              Feedback
-            </a>
+            <FeedbackButton />
             <DeleteImportsMenuItem />
             <button
               onClick={handleLogout}

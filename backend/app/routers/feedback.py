@@ -1,5 +1,4 @@
-from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, field_validator
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from sqlmodel import Session
 
 from ..database import get_session
@@ -11,44 +10,51 @@ from ..rate_limit import limiter
 router = APIRouter(prefix="/api/feedback", tags=["feedback"])
 
 _CATEGORIES = {"bug", "feature", "general"}
-
-
-class FeedbackRequest(BaseModel):
-    category: str = "general"
-    message: str
-    page_url: str | None = None
-
-    @field_validator("category")
-    @classmethod
-    def _valid_category(cls, v: str) -> str:
-        if v not in _CATEGORIES:
-            raise ValueError(f"category must be one of {sorted(_CATEGORIES)}")
-        return v
-
-    @field_validator("message")
-    @classmethod
-    def _non_empty_message(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            raise ValueError("message must not be empty")
-        if len(v) > 5000:
-            raise ValueError("message must be 5000 characters or fewer")
-        return v
+_MAX_ATTACHMENT_MB = 5
+_MAX_ATTACHMENT_BYTES = _MAX_ATTACHMENT_MB * 1024 * 1024
+_ALLOWED_ATTACHMENT_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"}
 
 
 @router.post("")
 @limiter.limit("10/hour")
-def submit_feedback(
+async def submit_feedback(
     request: Request,
-    body: FeedbackRequest,
+    category: str = Form("general"),
+    message: str = Form(...),
+    page_url: str | None = Form(None),
+    attachment: UploadFile | None = File(None),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
+    if category not in _CATEGORIES:
+        raise HTTPException(status_code=422, detail=f"category must be one of {sorted(_CATEGORIES)}")
+
+    message = message.strip()
+    if not message:
+        raise HTTPException(status_code=422, detail="message must not be empty")
+    if len(message) > 5000:
+        raise HTTPException(status_code=422, detail="message must be 5000 characters or fewer")
+
+    attachment_bytes: bytes | None = None
+    attachment_filename: str | None = None
+    attachment_content_type: str | None = None
+    if attachment is not None and attachment.filename:
+        if attachment.content_type not in _ALLOWED_ATTACHMENT_TYPES:
+            raise HTTPException(status_code=422, detail="Attachment must be an image or PDF")
+        attachment_bytes = await attachment.read()
+        if len(attachment_bytes) > _MAX_ATTACHMENT_BYTES:
+            raise HTTPException(status_code=422, detail=f"Attachment must be {_MAX_ATTACHMENT_MB}MB or smaller")
+        attachment_filename = attachment.filename
+        attachment_content_type = attachment.content_type
+
     feedback = Feedback(
         user_id=current_user.id,
-        category=body.category,
-        message=body.message,
-        page_url=body.page_url,
+        category=category,
+        message=message,
+        page_url=page_url,
+        attachment=attachment_bytes,
+        attachment_filename=attachment_filename,
+        attachment_content_type=attachment_content_type,
     )
     session.add(feedback)
     session.commit()

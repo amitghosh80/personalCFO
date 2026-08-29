@@ -284,12 +284,14 @@ export async function clearAllData(): Promise<ClearDataResult> {
 export async function submitFeedback(
   category: FeedbackCategory,
   message: string,
-  pageUrl?: string
+  pageUrl?: string,
+  attachment?: File | null
 ): Promise<FeedbackResponse> {
-  const res = await apiFetch("/api/feedback", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ category, message, page_url: pageUrl ?? null }),
-  });
+  const form = new FormData();
+  form.append("category", category);
+  form.append("message", message);
+  if (pageUrl) form.append("page_url", pageUrl);
+  if (attachment) form.append("attachment", attachment);
+  const res = await apiFetch("/api/feedback", { method: "POST", body: form });
   return handleResponse<FeedbackResponse>(res);
 }

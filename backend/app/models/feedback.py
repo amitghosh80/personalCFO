@@ -12,4 +12,7 @@ class Feedback(SQLModel, table=True):
     category: str = Field(default="general")
     message: str
     page_url: Optional[str] = Field(default=None)
+    attachment: Optional[bytes] = Field(default=None)
+    attachment_filename: Optional[str] = Field(default=None)
+    attachment_content_type: Optional[str] = Field(default=None)
     created_at: datetime = Field(default_factory=datetime.utcnow)
