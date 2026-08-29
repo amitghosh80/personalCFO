@@ -32,7 +32,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <nav className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <a href="/" className="text-lg font-bold text-gray-900 tracking-tight">
-            PersonalCFO
+            personal<span className="text-blue-600">CFO</span>
           </a>
           <div className="flex items-center gap-5">
             <a href="/app" className="text-sm text-blue-600 hover:text-blue-800 transition-colors">
