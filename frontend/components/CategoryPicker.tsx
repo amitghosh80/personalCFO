@@ -40,25 +40,31 @@ export default function CategoryPicker({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <select
-        value={primary}
-        onChange={(e) => onPrimaryChange(e.target.value)}
-        className="px-2 py-1 text-sm border border-gray-200 rounded-md bg-white"
-      >
-        {primaries.map((p) => (
-          <option key={p.key} value={p.key}>{p.display}</option>
-        ))}
-      </select>
-      <select
-        value={sub}
-        onChange={(e) => setSub(e.target.value)}
-        className="px-2 py-1 text-sm border border-gray-200 rounded-md bg-white"
-      >
-        {subs.map((s) => (
-          <option key={s.key} value={s.key}>{s.display}</option>
-        ))}
-      </select>
+    <div className="flex flex-wrap items-end gap-2">
+      <label className="flex flex-col gap-0.5">
+        <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400">Category</span>
+        <select
+          value={primary}
+          onChange={(e) => onPrimaryChange(e.target.value)}
+          className="px-2 py-1 text-sm font-medium border border-gray-300 rounded-md bg-white"
+        >
+          {primaries.map((p) => (
+            <option key={p.key} value={p.key}>{p.display}</option>
+          ))}
+        </select>
+      </label>
+      <label className="flex flex-col gap-0.5">
+        <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400">Subcategory</span>
+        <select
+          value={sub}
+          onChange={(e) => setSub(e.target.value)}
+          className="px-2 py-1 text-sm border border-gray-200 rounded-md bg-white"
+        >
+          {subs.map((s) => (
+            <option key={s.key} value={s.key}>{s.display}</option>
+          ))}
+        </select>
+      </label>
       {showRuleToggle && (
         <label className="flex items-center gap-1 text-xs text-gray-500">
           <input

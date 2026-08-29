@@ -283,7 +283,7 @@ _RULES: list[tuple[str, str, list[str]]] = [
         r"internet\s*(service|provider|bill)", r"cable\s*(tv|bill|service)",
     ]),
     ("utilities", "phone", [
-        r"at&?t(?!\s*wireless)?", r"verizon", r"t.mobile", r"metro\s*pcs", r"\bsprint\b",
+        r"\bat&?t\b", r"verizon", r"t.mobile", r"metro\s*pcs", r"\bsprint\b",
         r"\bmint\s*mobile\b", r"\bgoogle\s*fi\b", r"\bcricket\s*wireless\b", r"\bvisible\b",
     ]),
 
@@ -386,7 +386,7 @@ _RULES: list[tuple[str, str, list[str]]] = [
     ("subscriptions", "streaming", [
         r"netflix", r"spotify", r"hulu\b", r"disney\+?", r"hbo\s*(max|now)", r"\bmax\b\s*stream",
         r"peacock\b", r"paramount\+?", r"apple\s*(tv|music|one|arcade)", r"youtube\s*(premium|tv)",
-        r"amazon\s*(prime|music|video)", r"\bpandora\b", r"\btidal\b", r"\bdeezer\b", r"audible\b",
+        r"amazon\s*(prime|music|video)", r"\bpandora\b(?!\s*\d{5,})", r"\btidal\b", r"\bdeezer\b", r"audible\b",
     ]),
     ("subscriptions", "software", [
         r"adobe\b", r"dropbox", r"icloud\+?", r"google\s*(one|workspace|storage)",

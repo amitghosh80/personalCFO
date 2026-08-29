@@ -69,6 +69,30 @@ def test_update_category_and_create_rule(session):
         app.dependency_overrides.clear()
 
 
+def test_apply_to_merchant_retags_other_existing_transactions(session):
+    """AMI feedback: 'apply to merchant' must retag other transactions from the
+    same merchant immediately, not just future imports."""
+    t1 = _debit(session, "THE HALAL GUYS SLU 014020400000124 SEATTLE WA JASON@THGSEATTLE.COM", 15.0,
+                expense_category="utilities", expense_subcategory="other")
+    t2 = _debit(session, "THE HALAL GUYS SLU 014020400000124 SEATTLE WA JASON@THGSEATTLE.COM", 12.0,
+                expense_category="utilities", expense_subcategory="other")
+    try:
+        client = _client(session)
+        res = client.patch(
+            f"/api/categories/transaction/{t1.id}",
+            json={"primary": "food_and_drink", "subcategory": "restaurant", "create_rule": True},
+        )
+        assert res.status_code == 200
+        assert res.json()["updated"] == 2
+        session.refresh(t1)
+        session.refresh(t2)
+        assert t1.expense_category == "food_and_drink"
+        assert t2.expense_category == "food_and_drink"
+        assert t2.category_source == "user"
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_update_rejects_invalid_category(session):
     t = _debit(session, "SOMETHING", 10.0, expense_category="other")
     try:

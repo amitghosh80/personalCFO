@@ -63,10 +63,12 @@ def _apply_user_category(t: Transaction, primary: str, subcategory: str) -> None
     t.confidence_label = "high"
 
 
-def _maybe_create_rule(session: Session, user_id: int, description: str, primary: str, subcategory: str) -> None:
+def _maybe_create_rule(session: Session, user_id: int, description: str, primary: str, subcategory: str) -> str | None:
+    """Create/update the merchant rule and return its pattern, or None if the
+    description normalized to nothing (e.g. all-numeric)."""
     pattern = normalize_merchant(description)
     if not pattern:
-        return
+        return None
     existing = session.exec(
         select(MerchantRule)
         .where(MerchantRule.user_id == user_id)
@@ -78,6 +80,32 @@ def _maybe_create_rule(session: Session, user_id: int, description: str, primary
         session.add(existing)
     else:
         session.add(MerchantRule(user_id=user_id, merchant_pattern=pattern, primary=primary, subcategory=subcategory))
+    return pattern
+
+
+def _apply_rule_to_existing(
+    session: Session, user_id: int, pattern: str, primary: str, subcategory: str, exclude_ids: set[int]
+) -> int:
+    """Retag every other existing transaction from this merchant (substring
+    match, same rule the AI-categorizer pipeline uses at import time) so
+    'apply to merchant' takes effect immediately instead of only on future
+    imports."""
+    rows = session.exec(
+        select(Transaction)
+        .where(Transaction.user_id == user_id)
+        .where(Transaction.transaction_type == TransactionType.debit)
+        .where(Transaction.is_duplicate == False)  # noqa: E712
+    ).all()
+    updated = 0
+    for t in rows:
+        if t.id in exclude_ids:
+            continue
+        if pattern.upper() not in decrypt(t.description).upper():
+            continue
+        _apply_user_category(t, primary, subcategory)
+        session.add(t)
+        updated += 1
+    return updated
 
 
 @router.get("/taxonomy")
@@ -112,10 +140,13 @@ def update_category(
 
     _apply_user_category(txn, body.primary, body.subcategory)
     session.add(txn)
+    updated = 1
     if body.create_rule:
-        _maybe_create_rule(session, current_user.id, decrypt(txn.description), body.primary, body.subcategory)
+        pattern = _maybe_create_rule(session, current_user.id, decrypt(txn.description), body.primary, body.subcategory)
+        if pattern:
+            updated += _apply_rule_to_existing(session, current_user.id, pattern, body.primary, body.subcategory, {txn.id})
     session.commit()
-    return {"updated": 1, "rule_created": body.create_rule}
+    return {"updated": updated, "rule_created": body.create_rule}
 
 
 @router.post("/bulk")
@@ -127,6 +158,7 @@ def bulk_update_category(
     _validate(body.primary, body.subcategory)
     updated = 0
     rule_done = False
+    rule_pattern: str | None = None
     for txn_id in body.transaction_ids:
         txn = session.get(Transaction, txn_id)
         if not txn or txn.user_id != current_user.id:
@@ -134,9 +166,13 @@ def bulk_update_category(
         _apply_user_category(txn, body.primary, body.subcategory)
         session.add(txn)
         if body.create_rule and not rule_done:
-            _maybe_create_rule(session, current_user.id, decrypt(txn.description), body.primary, body.subcategory)
+            rule_pattern = _maybe_create_rule(session, current_user.id, decrypt(txn.description), body.primary, body.subcategory)
             rule_done = True
         updated += 1
+    if rule_pattern:
+        updated += _apply_rule_to_existing(
+            session, current_user.id, rule_pattern, body.primary, body.subcategory, set(body.transaction_ids)
+        )
     session.commit()
     return {"updated": updated, "rule_created": rule_done}
 
