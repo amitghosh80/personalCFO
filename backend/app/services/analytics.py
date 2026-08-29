@@ -580,6 +580,7 @@ def search_transactions(
     max_amount: float | None = None,
     merchant_contains: str | None = None,
     txn_type: str | None = None,
+    income_category: str | None = None,
     limit: int = 50,
     today: date | None = None,
 ) -> dict:
@@ -595,6 +596,8 @@ def search_transactions(
         txns = [t for t in txns if t["expense_category"] == primary]
     if subcategory:
         txns = [t for t in txns if t["expense_subcategory"] == subcategory]
+    if income_category:
+        txns = [t for t in txns if t["income_category"] == income_category]
     if min_amount is not None:
         txns = [t for t in txns if t["amount"] >= min_amount]
     if max_amount is not None:
@@ -610,7 +613,8 @@ def search_transactions(
     rows = [
         {"id": t["id"], "date": t["date"].isoformat(), "description": t["description"],
          "amount": round(t["amount"], 2), "type": t["type"].value,
-         "category": t["expense_category"], "subcategory": t["expense_subcategory"]}
+         "category": t["expense_category"], "subcategory": t["expense_subcategory"],
+         **({"income_category": t["income_category"]} if t["type"] == TransactionType.credit else {})}
         for t in txns[:limit]
     ]
     return {"transactions": rows, "returned": len(rows), "truncated": truncated, "limit": limit}
@@ -683,13 +687,14 @@ TOOLS = [
     },
     {
         "name": "search_transactions",
-        "description": "List individual transactions matching filters. Use only when line-item detail is needed; results are capped at 100 rows.",
+        "description": "List individual transactions matching filters. Use only when line-item detail is needed; results are capped at 100 rows. To drill into a specific income transaction (e.g. \"which transaction was my gig income?\"), set txn_type to credit and income_category to the category from income_summary.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "period": _PERIOD_SCHEMA,
                 "primary": {"type": "string"},
                 "subcategory": {"type": "string"},
+                "income_category": {"type": "string", "description": "Filter credits by income category (salary, freelance, interest, rental, gig, other). Only meaningful with txn_type=credit."},
                 "min_amount": {"type": "number"},
                 "max_amount": {"type": "number"},
                 "merchant_contains": {"type": "string"},
@@ -709,7 +714,7 @@ _DISPATCH = {
     "search_transactions": lambda s, uid, a, today: search_transactions(
         s, uid, a.get("period"), a.get("primary"), a.get("subcategory"),
         a.get("min_amount"), a.get("max_amount"), a.get("merchant_contains"),
-        a.get("txn_type"), a.get("limit", 50), today),
+        a.get("txn_type"), a.get("income_category"), a.get("limit", 50), today),
 }
 
 

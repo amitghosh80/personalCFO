@@ -60,6 +60,7 @@ function toolStyle(name: string) {
 
 interface DisplayMessage extends ChatMessage {
   tools?: ChatToolUse[];
+  followups?: string[];
 }
 
 function coverageText(c: DataCoverage): string | null {
@@ -144,7 +145,10 @@ export default function ChatInterface({
     setLoading(true);
     try {
       const res = await sendChatMessage(q, history);
-      setMessages((prev) => [...prev, { role: "assistant", content: res.answer, tools: res.tools_used }]);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: res.answer, tools: res.tools_used, followups: res.followups },
+      ]);
       if (res.coverage) setCoverage(res.coverage);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
@@ -162,7 +166,9 @@ export default function ChatInterface({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialMessage]);
 
-  const showStarters = !loading && starters.length > 0;
+  const lastAssistantFollowups = [...messages].reverse().find((m) => m.role === "assistant")?.followups;
+  const showStarters = !loading && messages.length === 0 && starters.length > 0;
+  const showFollowups = !loading && messages.length > 0 && !!lastAssistantFollowups?.length;
 
   return (
     <div className="flex flex-col h-[85vh] rounded-3xl border border-gray-200 bg-white shadow-lg overflow-hidden">
@@ -268,6 +274,21 @@ export default function ChatInterface({
       {showStarters && (
         <div className="flex flex-wrap gap-2 px-4 pb-3 pt-2">
           {starters.map((q) => (
+            <button
+              key={q}
+              onClick={() => ask(q)}
+              className="text-xs px-3 py-1.5 rounded-full border border-gray-200 bg-white text-gray-600 shadow-sm hover:border-blue-300 hover:text-blue-700 hover:shadow transition-all"
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Contextual follow-ups for the last answer */}
+      {showFollowups && (
+        <div className="flex flex-wrap gap-2 px-4 pb-3 pt-2">
+          {lastAssistantFollowups!.map((q) => (
             <button
               key={q}
               onClick={() => ask(q)}

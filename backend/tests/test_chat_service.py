@@ -70,6 +70,41 @@ def test_loop_respects_iteration_cap(make_txn):
 
     assert len(client.calls) == 3  # capped
     assert out["answer"]  # returns a graceful message, not an exception
+    assert out["followups"] == []  # no extra call for a fallback answer
+
+
+def test_followups_generated_from_clean_answer(make_txn):
+    s = make_txn.__self_session__
+    responses = [
+        SimpleNamespace(stop_reason="end_turn", content=[_text_block("You spent $100 on food.")]),
+        SimpleNamespace(stop_reason="end_turn", content=[
+            _text_block('["What about groceries?", "How does that compare to last month?"]')]),
+    ]
+    client = FakeClient(responses)
+
+    out = chat_service.answer_question(
+        s, TEST_USER_ID, "How much did I spend?", [], client=client, model="m", today=TODAY)
+
+    assert out["followups"] == ["What about groceries?", "How does that compare to last month?"]
+    assert len(client.calls) == 2
+    followup_call = client.calls[1]
+    assert "How much did I spend?" in followup_call["messages"][0]["content"]
+    assert "You spent $100 on food." in followup_call["messages"][0]["content"]
+
+
+def test_followups_default_to_empty_on_unparseable_response(make_txn):
+    s = make_txn.__self_session__
+    responses = [
+        SimpleNamespace(stop_reason="end_turn", content=[_text_block("You spent $100 on food.")]),
+        SimpleNamespace(stop_reason="end_turn", content=[_text_block("not json")]),
+    ]
+    client = FakeClient(responses)
+
+    out = chat_service.answer_question(
+        s, TEST_USER_ID, "How much did I spend?", [], client=client, model="m", today=TODAY)
+
+    assert out["answer"] == "You spent $100 on food."
+    assert out["followups"] == []
 
 
 def test_system_prompt_includes_todays_date(make_txn):
