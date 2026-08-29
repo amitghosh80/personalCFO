@@ -106,7 +106,22 @@ export default function IncomeReview({ jobId }: { jobId: string }) {
     }
   };
 
-  const handleSkip = () => router.push(`/import/${jobId}/summary`);
+  const handleSkip = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      // Unreviewed candidates otherwise count as tentative income (AMI-24) —
+      // skipping must explicitly deny them so nothing gets registered.
+      const candidateIds = credits.filter((t) => t.is_income_candidate).map((t) => t.id);
+      if (candidateIds.length) {
+        await confirmIncome(jobId, candidateIds, false);
+      }
+      router.push(`/import/${jobId}/summary`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to skip. Please try again.");
+      setSaving(false);
+    }
+  };
 
   const handleExport = () => {
     const categoryOverrides = Object.fromEntries(
@@ -247,7 +262,8 @@ export default function IncomeReview({ jobId }: { jobId: string }) {
         )}
         <button
           onClick={handleSkip}
-          className="px-6 py-3 text-gray-600 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors shrink-0"
+          disabled={saving}
+          className="px-6 py-3 text-gray-600 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Skip for now
         </button>
