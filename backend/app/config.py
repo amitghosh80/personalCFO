@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     email_from: str = "PersonalCFO <onboarding@resend.dev>"
     # Base URL used to build password-reset links (prod: https://personalcfo.agency).
     frontend_url: str = "http://localhost:3000"
+    # Linear integration (AMI feedback triage): every /api/feedback submission
+    # creates a Bug-labeled issue in this team/project. Empty key disables it —
+    # feedback submission itself never depends on Linear being reachable.
+    linear_api_key: str = ""
+    linear_team_id: str = "69d8df00-a4f6-46a9-a65f-3992afe77a9a"  # Amit Ghosh (AMI)
+    linear_project_id: str = "7ca66a5a-40d5-454a-910c-06acf660d4ed"  # Personal CFO
+    linear_bug_label_id: str = "ec949d39-2166-4723-949b-0f3a87efaa6d"  # "Bug" label
 
     class Config:
         env_file = ".env"
