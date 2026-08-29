@@ -207,6 +207,7 @@ export interface DataCoverage {
 export interface ChatResponse {
   answer: string;
   tools_used: ChatToolUse[];
+  followups?: string[];
   coverage?: DataCoverage;
 }
 
@@ -225,6 +226,13 @@ export interface DashboardInsight {
 
 // ─── Financial Profile (Flow 5: evergreen metrics) ────────────────────────────
 
+export interface CommitmentOccurrence {
+  id: number;
+  date: string;
+  amount: number;
+  description: string;
+}
+
 export interface CommitmentDetail {
   merchant: string;
   cadence: string;
@@ -233,6 +241,7 @@ export interface CommitmentDetail {
   next_expected_charge: string;
   occurrences_detected: number;
   supporting_transaction_ids: number[];
+  occurrences: CommitmentOccurrence[];
   confidence: number;
   confidence_label: ConfidenceLabel;
   cadence_ambiguous: boolean;

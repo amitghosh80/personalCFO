@@ -6,6 +6,7 @@ interest paid — rendered as the top-of-page module on the View Important page.
 These are computed views, not stored events: every call recomputes from
 scratch off `load_ledger`. No new tables, no dismiss semantics.
 """
+import calendar
 import re
 import statistics
 from collections import defaultdict
@@ -115,6 +116,25 @@ def _classify_cadence(avg_gap_days: float) -> str | None:
     return None
 
 
+# Cadences anchored to a calendar day (as opposed to weekly/biweekly, which are
+# anchored to a day of the week and already constrained by their tight gap window).
+_DAY_ANCHORED_CADENCES = {"monthly", "quarterly", "annual"}
+_DAY_ANCHOR_TOLERANCE_DAYS = 2
+
+
+def _days_in_month(d: date) -> int:
+    return calendar.monthrange(d.year, d.month)[1]
+
+
+def _day_anchor_distance(d1: date, d2: date) -> int:
+    """Calendar-day distance between two dates' day-of-month, treating both
+    ends of shorter/longer months as the same anchor (e.g. the 31st and the
+    28th in February both mean "last day of the month")."""
+    day_diff = abs(d1.day - d2.day)
+    end_diff = abs((_days_in_month(d1) - d1.day) - (_days_in_month(d2) - d2.day))
+    return min(day_diff, end_diff)
+
+
 # ─── Shared helpers ────────────────────────────────────────────────────────────
 
 def _matches_any(desc: str, patterns: list[str]) -> bool:
@@ -168,6 +188,17 @@ def _debit_totals_by_month(ledger: list[dict]) -> dict[str, float]:
 
 # ─── Recurring commitment detection (shared by metrics 1 and 4) ───────────────
 
+# Categories where "one charge per cycle" is the norm — bills and obligations.
+# Categories like food_and_drink, shopping, or transportation have many
+# independent, variably-timed purchases per month; a pair that coincidentally
+# matches amount/cadence there is far more likely to be noise than a real
+# commitment, so they're excluded rather than left for the cadence/amount
+# checks to (unreliably) sort out.
+_COMMITMENT_ELIGIBLE_CATEGORIES = frozenset({
+    "housing", "utilities", "subscriptions", "insurance", "debt_payments", "credit_card_payment",
+})
+
+
 def detect_commitments(ledger: list[dict], today: date) -> list[dict]:
     """Debits grouped by normalized merchant, classified by cadence (weekly /
     biweekly / monthly / quarterly / annual), with amounts stable within 10% and
@@ -176,6 +207,8 @@ def detect_commitments(ledger: list[dict], today: date) -> list[dict]:
     by_merchant: dict[str, list[dict]] = defaultdict(list)
     for t in ledger:
         if t["type"] != TransactionType.debit or is_transfer(t["description"]):
+            continue
+        if t["expense_category"] not in _COMMITMENT_ELIGIBLE_CATEGORIES:
             continue
         key = _normalize_merchant(t["description"])
         if key:
@@ -210,6 +243,18 @@ def detect_commitments(ledger: list[dict], today: date) -> list[dict]:
             if cadence is None:
                 continue
 
+            # A real subscription/bill lands on (near) the same calendar day every
+            # period. Reject clusters whose average gap happens to fall in a cadence
+            # window but whose dates don't actually anchor to a consistent day —
+            # e.g. two coincidentally similar-priced purchases ~30 days apart.
+            if cadence in _DAY_ANCHORED_CADENCES:
+                anchor_date = items[0]["date"]
+                if any(
+                    _day_anchor_distance(anchor_date, i["date"]) > _DAY_ANCHOR_TOLERANCE_DAYS
+                    for i in items[1:]
+                ):
+                    continue
+
             gap_stdev = statistics.stdev(gaps) if len(gaps) > 1 else 0.0
             cadence_ambiguous = (gap_stdev / avg_gap) >= 0.25 if avg_gap else True
 
@@ -236,6 +281,15 @@ def detect_commitments(ledger: list[dict], today: date) -> list[dict]:
                 "next_expected_charge": next_expected.isoformat(),
                 "occurrences_detected": len(items),
                 "supporting_transaction_ids": [i["id"] for i in items],
+                "occurrences": [
+                    {
+                        "id": i["id"],
+                        "date": i["date"].isoformat(),
+                        "amount": round(i["amount"], 2),
+                        "description": i["description"],
+                    }
+                    for i in items
+                ],
                 "confidence": round(min(conf, 1.0), 2),
                 "confidence_label": _conf_label(min(conf, 1.0)),
                 "cadence_ambiguous": cadence_ambiguous,

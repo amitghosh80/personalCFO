@@ -86,6 +86,50 @@ def test_committed_monthly_spend_still_drops_a_genuinely_cancelled_charge(make_t
     assert payload["commitment_count"] == 0
 
 
+def test_committed_monthly_spend_rejects_coincidental_same_amount_repeats(make_txn):
+    # Two same-priced coffee purchases that happen to land ~35 days apart (inside
+    # the "monthly" gap window) but on different days of the month. This is not
+    # a recurring commitment — it's a coincidence — and must not be surfaced.
+    make_txn(day="2026-05-01", amount=5.25, txn_type=TransactionType.debit,
+             description="STARBUCKS STORE #123", expense_category="dining")
+    make_txn(day="2026-06-05", amount=5.25, txn_type=TransactionType.debit,
+             description="STARBUCKS STORE #123", expense_category="dining")
+
+    metrics = _profile(make_txn.__self_session__, today=date(2026, 7, 1))["metrics"]
+    payload = metrics["committed_monthly_spend"]["payload"]
+    assert payload["commitment_count"] == 0
+
+
+def test_committed_monthly_spend_excludes_non_bill_categories(make_txn):
+    # Two grocery runs that happen to satisfy amount stability, monthly cadence,
+    # AND the day-of-month anchor (all other checks pass) — but groceries are a
+    # many-independent-purchases category, so a matching pair out of many visits
+    # is coincidence, not a bill. Must be excluded on category grounds alone.
+    make_txn(day="2026-05-05", amount=62.40, txn_type=TransactionType.debit,
+             description="WHOLE FOODS MARKET", expense_category="food_and_drink")
+    make_txn(day="2026-06-06", amount=62.40, txn_type=TransactionType.debit,
+             description="WHOLE FOODS MARKET", expense_category="food_and_drink")
+
+    metrics = _profile(make_txn.__self_session__, today=date(2026, 7, 1))["metrics"]
+    payload = metrics["committed_monthly_spend"]["payload"]
+    assert payload["commitment_count"] == 0
+
+
+def test_committed_monthly_spend_accepts_month_end_anchored_billing(make_txn):
+    # A real subscription billed on the last day of the month lands on the 31st
+    # in a long month and the 28th in February — the day numbers differ by 3 but
+    # both are "last day of the month," so this must still be detected.
+    make_txn(day="2026-01-31", amount=9.99, txn_type=TransactionType.debit,
+             description="APPLE.COM/BILL", expense_category="subscriptions")
+    make_txn(day="2026-02-28", amount=9.99, txn_type=TransactionType.debit,
+             description="APPLE.COM/BILL", expense_category="subscriptions")
+
+    metrics = _profile(make_txn.__self_session__, today=date(2026, 3, 1))["metrics"]
+    payload = metrics["committed_monthly_spend"]["payload"]
+    assert payload["commitment_count"] == 1
+    assert payload["commitments"][0]["merchant"] == "Apple.Com/Bill"
+
+
 def test_average_monthly_burn_3mo_and_month_to_date(make_txn):
     make_txn(day="2026-04-10", amount=1000.0, txn_type=TransactionType.debit, description="OLD MONTH", expense_category="shopping")
     make_txn(day="2026-05-10", amount=5000.0, txn_type=TransactionType.debit, description="MAY SPEND", expense_category="shopping")

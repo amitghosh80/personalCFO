@@ -16,7 +16,7 @@ const INCOME_LABELS: Record<string, string> = {
 };
 
 // Keys mirror backend PRIMARY_DISPLAY in expense_categorizer.py.
-const EXPENSE_LABELS: Record<string, string> = {
+export const EXPENSE_LABELS: Record<string, string> = {
   housing: "Housing",
   utilities: "Utilities",
   food_and_drink: "Food & Drink",
@@ -111,13 +111,19 @@ export default function TransactionTable({
 
   async function saveCategory(t: Transaction, primary: string, sub: string, createRule: boolean) {
     await updateCategory(t.id, primary, sub, createRule);
-    setTransactions((prev) =>
-      prev.map((x) =>
-        x.id === t.id
-          ? { ...x, expense_category: primary as Transaction["expense_category"], expense_subcategory: sub, category_source: "user", confidence_label: "high" }
-          : x
-      )
-    );
+    if (createRule) {
+      // The rule retags every other existing transaction from this merchant
+      // server-side too — refetch rather than guessing which rows changed.
+      getTransactions(jobId).then(setTransactions).catch(() => {});
+    } else {
+      setTransactions((prev) =>
+        prev.map((x) =>
+          x.id === t.id
+            ? { ...x, expense_category: primary as Transaction["expense_category"], expense_subcategory: sub, category_source: "user", confidence_label: "high" }
+            : x
+        )
+      );
+    }
     setEditingId(null);
   }
 

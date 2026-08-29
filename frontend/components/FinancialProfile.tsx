@@ -4,9 +4,12 @@ import { useEffect, useState } from "react";
 import { getFinancialProfile } from "@/lib/api";
 import { fmt, formatMonth } from "@/components/MonthlyBreakdown";
 import SectionCard from "@/components/SectionCard";
+import { EXPENSE_LABELS } from "@/components/TransactionTable";
 import type {
   AverageMonthlyBurnPayload,
   AverageMonthlyIncomePayload,
+  CommitmentDetail,
+  CommitmentOccurrence,
   CommittedMonthlySpendPayload,
   ConfidenceLabel,
   FeesAndInterestPayload,
@@ -87,22 +90,128 @@ function primaryFigure(key: MetricKey, payload: any): { primary: string; seconda
   }
 }
 
+function TransactionDetailModal({
+  commitment,
+  occurrence,
+  onClose,
+}: {
+  commitment: CommitmentDetail;
+  occurrence: CommitmentOccurrence;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      onClick={onClose}
+    >
+      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Transaction</p>
+        <h3 className="text-lg font-bold text-gray-900">{commitment.merchant}</h3>
+        <p className="text-sm text-gray-500 mt-0.5">{occurrence.date}</p>
+        <p className="text-2xl font-bold text-gray-900 mt-1">{fmt(occurrence.amount)}</p>
+        {occurrence.description && (
+          <p className="text-xs text-gray-400 mt-1 break-words">{occurrence.description}</p>
+        )}
+
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <p className="text-xs font-semibold text-gray-500 mb-2">
+            Counted as a {commitment.cadence} commitment because of {commitment.occurrences.length} similar charges:
+          </p>
+          <ul className="divide-y divide-gray-100 max-h-56 overflow-y-auto">
+            {commitment.occurrences.map((o) => {
+              const isSelf = o.id === occurrence.id;
+              return (
+                <li
+                  key={o.id}
+                  className={`py-1.5 flex items-center justify-between text-sm ${
+                    isSelf ? "font-semibold text-gray-900" : "text-gray-500"
+                  }`}
+                >
+                  <span>
+                    {o.date}
+                    {isSelf ? " (this one)" : ""}
+                  </span>
+                  <span className="tabular-nums">{fmt(o.amount)}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-4 w-full rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const COMMITTED_SPEND_METHODOLOGY =
+  "Counted from bills, loans, insurance, subscriptions, and credit card payments. A merchant " +
+  "qualifies once the same amount (within 10%) repeats on a consistent schedule — weekly, " +
+  "biweekly, monthly, quarterly, or annual — landing within 2 days of the same point in that " +
+  "cycle each time.";
+
+function CommittedSpendDrillDown({ payload }: { payload: CommittedMonthlySpendPayload }) {
+  const [selected, setSelected] = useState<{ commitment: CommitmentDetail; occurrence: CommitmentOccurrence } | null>(null);
+
+  if (payload.commitments.length === 0) {
+    return (
+      <>
+        <p className="text-sm text-gray-400">No recurring commitments detected yet.</p>
+        <p className="mt-2 text-xs text-gray-400">{COMMITTED_SPEND_METHODOLOGY}</p>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <p className="mb-2 text-xs text-gray-400">{COMMITTED_SPEND_METHODOLOGY}</p>
+      <ul className="divide-y divide-gray-100">
+        {payload.commitments.map((c) => (
+          <li key={c.merchant + c.next_expected_charge} className="py-2">
+            <div className="flex items-center gap-3 text-sm">
+              <span className="flex-1 min-w-0 truncate text-gray-700">{c.merchant}</span>
+              <span className="shrink-0 text-xs text-gray-400">
+                {c.cadence} · {EXPENSE_LABELS[c.category] ?? c.category}
+              </span>
+              <span className="shrink-0 w-20 text-right tabular-nums text-gray-700">{fmt(c.amount_per_period)}</span>
+            </div>
+            <div className="mt-1 flex flex-wrap gap-2 pl-1">
+              {c.occurrences.map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => setSelected({ commitment: c, occurrence: o })}
+                  className="text-[11px] tabular-nums text-blue-600 hover:text-blue-800 hover:underline"
+                >
+                  {o.date}
+                </button>
+              ))}
+            </div>
+          </li>
+        ))}
+      </ul>
+      {selected && (
+        <TransactionDetailModal
+          commitment={selected.commitment}
+          occurrence={selected.occurrence}
+          onClose={() => setSelected(null)}
+        />
+      )}
+    </>
+  );
+}
+
 function DrillDown({ metricKey, payload }: { metricKey: MetricKey; payload: any }) {
   switch (metricKey) {
     case "committed_monthly_spend": {
       const p = payload as CommittedMonthlySpendPayload;
-      if (p.commitments.length === 0) return <p className="text-sm text-gray-400">No recurring commitments detected yet.</p>;
-      return (
-        <ul className="divide-y divide-gray-100">
-          {p.commitments.map((c) => (
-            <li key={c.merchant + c.next_expected_charge} className="py-2 flex items-center gap-3 text-sm">
-              <span className="flex-1 min-w-0 truncate text-gray-700">{c.merchant}</span>
-              <span className="shrink-0 text-xs text-gray-400">{c.cadence}</span>
-              <span className="shrink-0 w-20 text-right tabular-nums text-gray-700">{fmt(c.amount_per_period)}</span>
-            </li>
-          ))}
-        </ul>
-      );
+      return <CommittedSpendDrillDown payload={p} />;
     }
     case "average_monthly_burn": {
       const p = payload as AverageMonthlyBurnPayload;
@@ -209,7 +318,11 @@ function Tile({ metricKey, metric }: { metricKey: MetricKey; metric: ProfileMetr
   const { primary, secondary } = primaryFigure(metricKey, metric.payload);
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 flex flex-col">
+    <div
+      className={`rounded-xl border border-gray-200 bg-white p-4 flex flex-col ${
+        expanded ? "sm:col-span-2 lg:col-span-3" : ""
+      }`}
+    >
       <div className="flex items-start justify-between gap-2 mb-1">
         <p className="text-xs font-semibold text-gray-500">{METRIC_LABELS[metricKey]}</p>
         <ConfidenceChip label={metric.confidence_label} />
