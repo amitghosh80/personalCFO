@@ -19,7 +19,9 @@ from ..services.analytics import (
     compare_periods,
     recurring_charges,
     is_transfer as _is_transfer,
+    is_spending_txn,
 )
+from ..services.profile_engine import _fee_subtype
 
 _load_txns = load_ledger
 
@@ -1165,6 +1167,71 @@ def _dash_savings_rate(session: Session, user_id: int, month: str) -> Optional[d
     }
 
 
+def _dash_second_category(session: Session, user_id: int, month: str) -> Optional[dict]:
+    """The #2 spending category for the month — a same-period fact (no prior-
+    month baseline), so unlike _dash_top_category it's always safe to show
+    even while the month is still partial."""
+    cur = spending_by_category(session, user_id, {"month": month})
+    if len(cur["by_primary"]) < 2:
+        return None
+    second = cur["by_primary"][1]
+    total = cur["total_spending"]
+    label = cur["period"]["label"]
+    pct = (second["amount"] / total * 100) if total else 0
+
+    return {
+        "type": "second_category",
+        "title": f"{second['display']} was your second-biggest expense in {label}",
+        "text": (f"You spent ${second['amount']:,.2f} on {second['display']} in {label} — "
+                 f"{pct:.0f}% of your ${total:,.2f} total spending."),
+        "question": f"What's driving my {second['display']} spending in {label}?",
+        "severity": "low",
+    }
+
+
+def _dash_avg_transaction(ledger: list[dict], month: str) -> Optional[dict]:
+    """Purchase count and average size for the month — a same-period fact,
+    safe to show even while the month is still partial."""
+    debits = [t for t in ledger if t["month"] == month and is_spending_txn(t)]
+    if len(debits) < 2:
+        return None
+    total = sum(t["amount"] for t in debits)
+    avg = total / len(debits)
+    label = _fmt(month)
+
+    return {
+        "type": "avg_transaction_size",
+        "title": f"{len(debits)} purchases averaging ${avg:,.2f} each in {label}",
+        "text": (f"You made {len(debits)} purchases in {label} totaling ${total:,.2f} — "
+                 f"an average of ${avg:,.2f} per transaction."),
+        "question": f"What did I spend the most on in {label}?",
+        "severity": "low",
+    }
+
+
+def _dash_fees_ytd(ledger: list[dict], today: date) -> Optional[dict]:
+    """Fees and interest paid so far this year — an all-time/YTD fact, not a
+    month-over-month comparison, so it's unaffected by the current month
+    being partial."""
+    year_start = date(today.year, 1, 1)
+    matched = [
+        t for t in ledger
+        if t["type"] == TransactionType.debit and t["date"] >= year_start and _fee_subtype(t["description"])
+    ]
+    if not matched:
+        return None
+    total = sum(t["amount"] for t in matched)
+
+    return {
+        "type": "fees_and_interest_ytd",
+        "title": f"${total:,.2f} in fees and interest paid this year",
+        "text": (f"You've paid ${total:,.2f} in bank fees, card fees, or interest so far in {today.year} "
+                 f"across {len(matched)} charge{'s' if len(matched) != 1 else ''}."),
+        "question": "What fees and interest have I paid this year, and can I avoid them?",
+        "severity": "high" if total >= 100 else "medium" if total >= 25 else "low",
+    }
+
+
 def dashboard_insights(session: Session, user_id: int, job_id: str, limit: int = 3) -> list[dict]:
     """Top proactive insights for the per-import summary page. Computed fresh on
     each call (no persistence) — see AMI-48."""
@@ -1198,12 +1265,22 @@ def _insights_for_month(session: Session, user_id: int, ledger: list[dict], mont
     idx = all_months.index(month) if month in all_months else -1
     prior_month = all_months[idx - 1] if idx > 0 else None
 
+    # The current calendar month is still partial — comparing it against a
+    # fully-elapsed prior month (fewer days of spending so far) always looks
+    # like a huge swing that isn't real. Drop the cross-month comparison for
+    # that case; a same-month metric like savings rate is unaffected.
+    is_partial_month = month == date.today().strftime("%Y-%m")
+    comparison_prior_month = None if is_partial_month else prior_month
+
     candidates = [c for c in (
-        _dash_top_category(session, user_id, month, prior_month),
+        _dash_top_category(session, user_id, month, comparison_prior_month),
         _dash_recurring(session, user_id),
         _dash_unusual_large_txn(ledger, month),
-        _dash_mom_change(session, user_id, month, prior_month),
+        _dash_mom_change(session, user_id, month, comparison_prior_month),
         _dash_savings_rate(session, user_id, month),
+        _dash_second_category(session, user_id, month),
+        _dash_avg_transaction(ledger, month),
+        _dash_fees_ytd(ledger, date.today()),
     ) if c]
 
     candidates.sort(key=lambda c: _DASH_SEVERITY_RANK[c["severity"]])

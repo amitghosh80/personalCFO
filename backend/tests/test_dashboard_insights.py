@@ -95,3 +95,29 @@ def test_missing_job_returns_nothing():
     eng = _engine()
     with Session(eng) as session:
         assert dashboard_insights(session, TEST_USER_ID, "missing-job") == []
+
+
+def _prior_month_anchor(today: date) -> date:
+    return date(today.year - 1, 12, 5) if today.month == 1 else date(today.year, today.month - 1, 5)
+
+
+def test_current_partial_month_skips_mom_comparisons():
+    # The current calendar month only has a few days of transactions so far —
+    # comparing it against a fully-elapsed prior month always looks like a
+    # huge (fake) swing. mom_spending_change must be dropped entirely, and
+    # top_category_vs_prior must fall back to its no-comparison phrasing.
+    today = date.today()
+    prior_anchor = _prior_month_anchor(today)
+    eng = _engine()
+    with Session(eng) as session:
+        session.add(_txn("job-prior", prior_anchor, "TRADER JOES", 1000.0, TransactionType.debit,
+                          expense_category="food_and_drink", expense_subcategory="groceries"))
+        session.add(_txn("job-current", today, "TRADER JOES", 20.0, TransactionType.debit,
+                          expense_category="food_and_drink", expense_subcategory="groceries"))
+        session.commit()
+        insights = dashboard_insights(session, TEST_USER_ID, "job-current")
+
+    assert all(i["type"] != "mom_spending_change" for i in insights)
+    top_category = next((i for i in insights if i["type"] == "top_category_vs_prior"), None)
+    if top_category is not None:
+        assert "from" not in top_category["title"]
