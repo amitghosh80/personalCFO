@@ -15,6 +15,7 @@ import type {
   ConfidenceLabel,
   FeesAndInterestPayload,
   FinancialProfile as FinancialProfileType,
+  FixedBreakdownGroup,
   FixedVsDiscretionaryPayload,
   ProfileMetric,
   SavingsRatePayload,
@@ -151,6 +152,55 @@ function TransactionDetailModal({
   );
 }
 
+function TransactionListModal({
+  title,
+  subtitle,
+  transactions,
+  onClose,
+}: {
+  title: string;
+  subtitle: string;
+  transactions: CommitmentOccurrence[];
+  onClose: () => void;
+}) {
+  const total = transactions.reduce((sum, t) => sum + t.amount, 0);
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      onClick={onClose}
+    >
+      <div
+        className="flex w-full max-w-md max-h-[80vh] flex-col rounded-xl bg-white p-6 shadow-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">{subtitle}</p>
+        <h3 className="text-lg font-bold text-gray-900 capitalize">{title}</h3>
+        <p className="text-sm text-gray-500 mt-0.5">
+          {transactions.length} transaction{transactions.length !== 1 ? "s" : ""} · {fmt(total)}
+        </p>
+        <ul className="mt-3 flex-1 divide-y divide-gray-100 overflow-y-auto">
+          {transactions.map((t) => (
+            <li key={t.id} className="py-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-700">{t.date}</span>
+                <span className="tabular-nums font-medium text-gray-900">{fmt(t.amount)}</span>
+              </div>
+              {t.description && <p className="text-xs text-gray-400 mt-0.5 break-words">{t.description}</p>}
+            </li>
+          ))}
+        </ul>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-4 w-full rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const COMMITTED_SPEND_METHODOLOGY =
   "Counted from bills, loans, insurance, subscriptions, and credit card payments. A merchant " +
   "qualifies once the same amount (within 10%) repeats on a consistent schedule — weekly, " +
@@ -201,6 +251,110 @@ function CommittedSpendDrillDown({ payload }: { payload: CommittedMonthlySpendPa
         <TransactionDetailModal
           commitment={selected.commitment}
           occurrence={selected.occurrence}
+          onClose={() => setSelected(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function FixedVsDiscretionaryDrillDown({ payload }: { payload: FixedVsDiscretionaryPayload }) {
+  const [selected, setSelected] = useState<{ title: string; subtitle: string; transactions: CommitmentOccurrence[] } | null>(
+    null
+  );
+
+  const renderGroup = (g: FixedBreakdownGroup, subtitle: string) => (
+    <li key={g.category} className="py-2">
+      <button
+        type="button"
+        onClick={() => setSelected({ title: g.group, subtitle, transactions: g.transactions })}
+        disabled={g.transactions.length === 0}
+        className="flex w-full items-center justify-between text-left text-sm disabled:cursor-default"
+      >
+        <span
+          className={
+            g.transactions.length > 0
+              ? "text-blue-600 hover:text-blue-800 hover:underline"
+              : "text-gray-500"
+          }
+        >
+          {g.group}
+        </span>
+        <span className="tabular-nums text-gray-700">{fmt(g.monthly_avg)}/mo</span>
+      </button>
+    </li>
+  );
+
+  return (
+    <>
+      <div className="space-y-4">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-1">
+            Fixed · {fmt(payload.fixed_monthly_avg)}/mo
+          </p>
+          {payload.fixed_breakdown.length === 0 ? (
+            <p className="text-sm text-gray-400">No fixed commitments in this window.</p>
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {payload.fixed_breakdown.map((g) => renderGroup(g, "Fixed commitment"))}
+            </ul>
+          )}
+        </div>
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-1">
+            Discretionary · {fmt(payload.discretionary_monthly_avg)}/mo
+          </p>
+          {payload.discretionary_breakdown.length === 0 ? (
+            <p className="text-sm text-gray-400">No discretionary spending in this window.</p>
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {payload.discretionary_breakdown.map((g) => renderGroup(g, "Discretionary spending"))}
+            </ul>
+          )}
+        </div>
+      </div>
+      {selected && (
+        <TransactionListModal
+          title={selected.title}
+          subtitle={selected.subtitle}
+          transactions={selected.transactions}
+          onClose={() => setSelected(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function FeesAndInterestDrillDown({ payload }: { payload: FeesAndInterestPayload }) {
+  const [selected, setSelected] = useState<{ title: string; transactions: CommitmentOccurrence[] } | null>(null);
+
+  if (payload.breakdown.length === 0) {
+    return <p className="text-sm text-gray-400">No fees or interest detected.</p>;
+  }
+
+  return (
+    <>
+      <ul className="divide-y divide-gray-100">
+        {payload.breakdown.map((b) => (
+          <li key={b.sub_type} className="py-2">
+            <button
+              type="button"
+              onClick={() => setSelected({ title: b.sub_type.replace(/_/g, " "), transactions: b.transactions })}
+              className="flex w-full items-center justify-between text-left text-sm text-blue-600 hover:text-blue-800 hover:underline"
+            >
+              <span className="capitalize">
+                {b.sub_type.replace(/_/g, " ")} ({b.transaction_count})
+              </span>
+              <span className="tabular-nums text-gray-700">{fmt(b.ytd_total)}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      {selected && (
+        <TransactionListModal
+          title={selected.title}
+          subtitle="Fees & interest"
+          transactions={selected.transactions}
           onClose={() => setSelected(null)}
         />
       )}
@@ -299,16 +453,7 @@ function DrillDown({ metricKey, payload }: { metricKey: MetricKey; payload: any 
     }
     case "fixed_vs_discretionary": {
       const p = payload as FixedVsDiscretionaryPayload;
-      return (
-        <ul className="divide-y divide-gray-100">
-          {p.fixed_breakdown.map((g) => (
-            <li key={g.group} className="py-2 flex items-center justify-between text-sm">
-              <span className="text-gray-500">{g.group}</span>
-              <span className="tabular-nums text-gray-700">{fmt(g.monthly_avg)}</span>
-            </li>
-          ))}
-        </ul>
-      );
+      return <FixedVsDiscretionaryDrillDown payload={p} />;
     }
     case "savings_rate": {
       const p = payload as SavingsRatePayload;
@@ -327,17 +472,7 @@ function DrillDown({ metricKey, payload }: { metricKey: MetricKey; payload: any 
     }
     case "fees_and_interest": {
       const p = payload as FeesAndInterestPayload;
-      if (p.breakdown.length === 0) return <p className="text-sm text-gray-400">No fees or interest detected.</p>;
-      return (
-        <ul className="divide-y divide-gray-100">
-          {p.breakdown.map((b) => (
-            <li key={b.sub_type} className="py-2 flex items-center justify-between text-sm">
-              <span className="text-gray-500 capitalize">{b.sub_type.replace(/_/g, " ")} ({b.transaction_count})</span>
-              <span className="tabular-nums text-gray-700">{fmt(b.ytd_total)}</span>
-            </li>
-          ))}
-        </ul>
-      );
+      return <FeesAndInterestDrillDown payload={p} />;
     }
   }
 }

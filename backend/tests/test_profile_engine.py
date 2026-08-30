@@ -234,7 +234,13 @@ def test_fixed_vs_discretionary_splits_rent_from_dining(make_txn):
     assert round(payload["discretionary_monthly_avg"], 2) == round(discretionary_avg, 2)
     assert round(payload["fixed_pct"], 1) == round(1500 / total_avg * 100, 1)
     assert payload["burn_rate_floor"] == 1500.0
-    assert payload["fixed_breakdown"] == [{"group": "Housing", "monthly_avg": 1500.0}]
+    assert len(payload["fixed_breakdown"]) == 1
+    housing = payload["fixed_breakdown"][0]
+    assert housing["group"] == "Housing"
+    assert housing["category"] == "housing"
+    assert housing["monthly_avg"] == 1500.0
+    assert len(housing["transactions"]) == 3
+    assert {t["amount"] for t in housing["transactions"]} == {1500.0}
     assert fixed["confidence_label"] == "high"
 
 
@@ -251,8 +257,13 @@ def test_fixed_vs_discretionary_does_not_flag_one_time_car_rental_as_fixed(make_
     metrics = _profile(make_txn.__self_session__)["metrics"]
     payload = metrics["fixed_vs_discretionary"]["payload"]
     assert payload["fixed_monthly_avg"] == 1500.0
-    assert payload["fixed_breakdown"] == [{"group": "Housing", "monthly_avg": 1500.0}]
+    assert len(payload["fixed_breakdown"]) == 1
+    assert payload["fixed_breakdown"][0]["group"] == "Housing"
+    assert payload["fixed_breakdown"][0]["monthly_avg"] == 1500.0
     assert round(payload["discretionary_monthly_avg"], 2) == round(701.14 / 3, 2)
+    assert len(payload["discretionary_breakdown"]) == 1
+    assert payload["discretionary_breakdown"][0]["group"] == "Travel"
+    assert len(payload["discretionary_breakdown"][0]["transactions"]) == 1
 
 
 def test_fixed_vs_discretionary_matches_committed_monthly_spend_commitment_set(make_txn):
@@ -275,7 +286,12 @@ def test_fixed_vs_discretionary_matches_committed_monthly_spend_commitment_set(m
     assert committed["committed_monthly_total"] == 5000.0
     assert fixed["fixed_monthly_avg"] == 5000.0
     assert fixed["discretionary_monthly_avg"] == 0.0
-    assert fixed["fixed_breakdown"] == [{"group": "Credit Card Payment", "monthly_avg": 5000.0}]
+    assert len(fixed["fixed_breakdown"]) == 1
+    ccp = fixed["fixed_breakdown"][0]
+    assert ccp["group"] == "Credit Card Payment"
+    assert ccp["monthly_avg"] == 5000.0
+    assert len(ccp["transactions"]) == 3
+    assert fixed["discretionary_breakdown"] == []
 
 
 def test_savings_rate_aggregate_ratio_over_window(make_txn):

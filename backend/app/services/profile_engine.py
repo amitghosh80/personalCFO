@@ -149,6 +149,20 @@ def _insufficient(requirement: str) -> dict:
     return {"status": "insufficient_data", "requirement": requirement}
 
 
+def _txn_summaries(items: list[dict]) -> list[dict]:
+    """Compact {id, date, amount, description} rows for drill-down modals,
+    newest first — same shape as a commitment's `occurrences`."""
+    return [
+        {
+            "id": t["id"],
+            "date": t["date"].isoformat(),
+            "amount": round(t["amount"], 2),
+            "description": t["description"],
+        }
+        for t in sorted(items, key=lambda x: x["date"], reverse=True)
+    ]
+
+
 def _complete_months(ledger: list[dict], today: date) -> list[str]:
     """Months strictly before the current (partial) month that have ledger data."""
     current_month = today.strftime("%Y-%m")
@@ -585,6 +599,9 @@ def _fixed_vs_discretionary(ledger: list[dict], today: date) -> dict:
     fixed_by_month: dict[str, float] = defaultdict(float)
     discretionary_by_month: dict[str, float] = defaultdict(float)
     fixed_by_category: dict[str, float] = defaultdict(float)
+    discretionary_by_category: dict[str, float] = defaultdict(float)
+    fixed_txns_by_category: dict[str, list[dict]] = defaultdict(list)
+    discretionary_txns_by_category: dict[str, list[dict]] = defaultdict(list)
     total_txn_count = 0
     uncategorized_count = 0
 
@@ -606,11 +623,15 @@ def _fixed_vs_discretionary(ledger: list[dict], today: date) -> dict:
             if t["expense_category"] in (None, "other"):
                 uncategorized_count += 1
 
+        category = t["expense_category"] or "other"
         if is_fixed:
             fixed_by_month[t["month"]] += t["amount"]
-            fixed_by_category[t["expense_category"] or "other"] += t["amount"]
+            fixed_by_category[category] += t["amount"]
+            fixed_txns_by_category[category].append(t)
         elif spending:
             discretionary_by_month[t["month"]] += t["amount"]
+            discretionary_by_category[category] += t["amount"]
+            discretionary_txns_by_category[category].append(t)
 
     fixed_monthly_avg = sum(fixed_by_month.get(m, 0.0) for m in window) / len(window)
     discretionary_monthly_avg = sum(discretionary_by_month.get(m, 0.0) for m in window) / len(window)
@@ -629,8 +650,22 @@ def _fixed_vs_discretionary(ledger: list[dict], today: date) -> dict:
     conf += 0.20 if uncategorized_ratio < 0.30 else 0.0
 
     fixed_breakdown = [
-        {"group": primary_display(cat), "monthly_avg": round(total / len(window), 2)}
+        {
+            "group": primary_display(cat),
+            "category": cat,
+            "monthly_avg": round(total / len(window), 2),
+            "transactions": _txn_summaries(fixed_txns_by_category[cat]),
+        }
         for cat, total in sorted(fixed_by_category.items(), key=lambda kv: kv[1], reverse=True)
+    ]
+    discretionary_breakdown = [
+        {
+            "group": primary_display(cat),
+            "category": cat,
+            "monthly_avg": round(total / len(window), 2),
+            "transactions": _txn_summaries(discretionary_txns_by_category[cat]),
+        }
+        for cat, total in sorted(discretionary_by_category.items(), key=lambda kv: kv[1], reverse=True)
     ]
 
     headline = f"Your baseline: {fixed_pct:.0f}% fixed, {100 - fixed_pct:.0f}% discretionary"
@@ -646,6 +681,7 @@ def _fixed_vs_discretionary(ledger: list[dict], today: date) -> dict:
         "fixed_pct": round(fixed_pct, 1),
         "burn_rate_floor": round(fixed_monthly_avg, 2),
         "fixed_breakdown": fixed_breakdown,
+        "discretionary_breakdown": discretionary_breakdown,
     })
 
 
@@ -724,12 +760,19 @@ def _fees_and_interest(ledger: list[dict], today: date) -> dict:
         trailing_12mo_total = sum(t["amount"] for t, _ in trailing)
 
     by_subtype: dict[str, dict] = defaultdict(lambda: {"ytd_total": 0.0, "transaction_count": 0})
+    txns_by_subtype: dict[str, list[dict]] = defaultdict(list)
     for t, s in ytd:
         by_subtype[s]["ytd_total"] += t["amount"]
         by_subtype[s]["transaction_count"] += 1
+        txns_by_subtype[s].append(t)
 
     breakdown = [
-        {"sub_type": s, "ytd_total": round(v["ytd_total"], 2), "transaction_count": v["transaction_count"]}
+        {
+            "sub_type": s,
+            "ytd_total": round(v["ytd_total"], 2),
+            "transaction_count": v["transaction_count"],
+            "transactions": _txn_summaries(txns_by_subtype[s]),
+        }
         for s, v in sorted(by_subtype.items(), key=lambda kv: kv[1]["ytd_total"], reverse=True)
     ]
 

@@ -304,7 +304,9 @@ export interface AverageMonthlyIncomePayload {
 
 export interface FixedBreakdownGroup {
   group: string;
+  category: string;
   monthly_avg: number;
+  transactions: CommitmentOccurrence[];
 }
 
 export interface FixedVsDiscretionaryPayload {
@@ -313,6 +315,7 @@ export interface FixedVsDiscretionaryPayload {
   fixed_pct: number;
   burn_rate_floor: number;
   fixed_breakdown: FixedBreakdownGroup[];
+  discretionary_breakdown: FixedBreakdownGroup[];
 }
 
 export interface SavingsRateMonthPoint {
@@ -336,6 +339,7 @@ export interface FeeBreakdown {
   sub_type: string;
   ytd_total: number;
   transaction_count: number;
+  transactions: CommitmentOccurrence[];
 }
 
 export interface FeesAndInterestPayload {
