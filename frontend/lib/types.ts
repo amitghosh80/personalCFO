@@ -258,6 +258,9 @@ export interface CommittedMonthlySpendPayload {
 export interface MonthlyDebitPoint {
   month: string;
   total_debits: number;
+  transaction_count: number;
+  vs_prev_month_pct: number | null;
+  top_categories: CategoryBreakdown[];
 }
 
 export interface AverageMonthlyBurnPayload {
@@ -265,6 +268,7 @@ export interface AverageMonthlyBurnPayload {
   burn_6mo: number | null;
   month_to_date: number;
   months_in_window: number;
+  variance_ratio: number;
   monthly_series: MonthlyDebitPoint[];
 }
 

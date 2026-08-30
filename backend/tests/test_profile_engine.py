@@ -146,6 +146,39 @@ def test_average_monthly_burn_3mo_and_month_to_date(make_txn):
     assert payload["month_to_date"] == 800.0
     assert payload["months_in_window"] == 3
 
+    series = {row["month"]: row for row in payload["monthly_series"]}
+    assert series["2026-05"]["vs_prev_month_pct"] is None  # first month in window, no prior point
+    assert series["2026-06"]["vs_prev_month_pct"] == 4.0  # (5200-5000)/5000
+    assert series["2026-07"]["transaction_count"] == 1
+    assert series["2026-07"]["top_categories"] == [
+        {"category": "shopping", "display": "Shopping", "amount": 5400.0}
+    ]
+
+
+def test_average_monthly_burn_category_breakdown_splits_by_month(make_txn):
+    make_txn(day="2026-06-05", amount=1500.0, txn_type=TransactionType.debit,
+             description="RENT PAYMENT", expense_category="housing")
+    make_txn(day="2026-06-12", amount=300.0, txn_type=TransactionType.debit,
+             description="WHOLE FOODS", expense_category="food_and_drink")
+    make_txn(day="2026-07-05", amount=1500.0, txn_type=TransactionType.debit,
+             description="RENT PAYMENT", expense_category="housing")
+    make_txn(day="2026-07-12", amount=900.0, txn_type=TransactionType.debit,
+             description="WHOLE FOODS", expense_category="food_and_drink")
+
+    metrics = _profile(make_txn.__self_session__, today=date(2026, 8, 1))["metrics"]
+    payload = metrics["average_monthly_burn"]["payload"]
+    series = {row["month"]: row for row in payload["monthly_series"]}
+
+    assert series["2026-06"]["top_categories"] == [
+        {"category": "housing", "display": "Housing", "amount": 1500.0},
+        {"category": "food_and_drink", "display": "Food & Drink", "amount": 300.0},
+    ]
+    assert series["2026-07"]["top_categories"] == [
+        {"category": "housing", "display": "Housing", "amount": 1500.0},
+        {"category": "food_and_drink", "display": "Food & Drink", "amount": 900.0},
+    ]
+    assert series["2026-07"]["vs_prev_month_pct"] == 33.3  # (2400-1800)/1800
+
 
 def test_average_monthly_income_confirmed_biweekly_stable(make_txn):
     for day in ("01", "15"):
@@ -203,6 +236,46 @@ def test_fixed_vs_discretionary_splits_rent_from_dining(make_txn):
     assert payload["burn_rate_floor"] == 1500.0
     assert payload["fixed_breakdown"] == [{"group": "Housing", "monthly_avg": 1500.0}]
     assert fixed["confidence_label"] == "high"
+
+
+def test_fixed_vs_discretionary_does_not_flag_one_time_car_rental_as_fixed(make_txn):
+    # "BUDGET RENT A CAR" is a one-time travel expense, but its description
+    # contains the word "rent" — regression guard against a keyword-matching
+    # false positive that isn't a detected recurring commitment.
+    for m in ("05", "06", "07"):
+        make_txn(day=f"2026-{m}-01", amount=1500.0, txn_type=TransactionType.debit,
+                 description="RENT PAYMENT", expense_category="housing")
+    make_txn(day="2026-07-15", amount=701.14, txn_type=TransactionType.debit,
+             description="BUDGET RENT A CAR CALGARY", expense_category="travel")
+
+    metrics = _profile(make_txn.__self_session__)["metrics"]
+    payload = metrics["fixed_vs_discretionary"]["payload"]
+    assert payload["fixed_monthly_avg"] == 1500.0
+    assert payload["fixed_breakdown"] == [{"group": "Housing", "monthly_avg": 1500.0}]
+    assert round(payload["discretionary_monthly_avg"], 2) == round(701.14 / 3, 2)
+
+
+def test_fixed_vs_discretionary_matches_committed_monthly_spend_commitment_set(make_txn):
+    # "Fixed" must be exactly the transactions backing Committed Monthly Spend's
+    # commitments — including a credit-card-payment commitment, which isn't
+    # "spending" but is still counted as fixed there.
+    for m in ("05", "06", "07"):
+        make_txn(day=f"2026-{m}-08", amount=5000.0, txn_type=TransactionType.debit,
+                 description="ACH Debit AMEX EPAYMENT", expense_category="credit_card_payment")
+    # An extra, irregular payment to the same merchant that is NOT part of the
+    # detected commitment cluster — must not be swept into "fixed" by merchant
+    # name, and since credit_card_payment isn't "spending" it must not land in
+    # "discretionary" either (it would double-count the card's own purchases).
+    make_txn(day="2026-06-16", amount=2000.0, txn_type=TransactionType.debit,
+             description="ACH Debit AMEX EPAYMENT", expense_category="credit_card_payment")
+
+    profile = _profile(make_txn.__self_session__)
+    committed = profile["metrics"]["committed_monthly_spend"]["payload"]
+    fixed = profile["metrics"]["fixed_vs_discretionary"]["payload"]
+    assert committed["committed_monthly_total"] == 5000.0
+    assert fixed["fixed_monthly_avg"] == 5000.0
+    assert fixed["discretionary_monthly_avg"] == 0.0
+    assert fixed["fixed_breakdown"] == [{"group": "Credit Card Payment", "monthly_avg": 5000.0}]
 
 
 def test_savings_rate_aggregate_ratio_over_window(make_txn):

@@ -15,33 +15,10 @@ from datetime import date, datetime, timedelta
 from sqlmodel import Session
 
 from ..models.transaction import TransactionType
-from .analytics import load_ledger, is_transfer, _norm as _normalize_merchant
+from .analytics import load_ledger, is_transfer, is_spending_txn, _norm as _normalize_merchant
 from .expense_categorizer import primary_display
 
 # ─── Pattern lists ─────────────────────────────────────────────────────────────
-
-_FIXED_OBLIGATION = [
-    r"\bmortgage\b",
-    r"\brent\b",
-    r"\blease\s*payment\b",
-    r"\b(car|auto)\s*loan\b",
-    r"\bloan\s*pay(mt|ment)?\b",
-    r"\belectric(ity)?\b",
-    r"\bpg&e\b",
-    r"\butilit(y|ies)\b",
-    r"\bwater\s*(bill|utility|dept|department)\b",
-    r"\bsewer\b",
-    r"\btrash\s*(collection|service)?\b",
-    r"\binternet\b",
-    r"\bbroadband\b",
-    r"\bcable\s*(tv|bill)?\b",
-    r"\bcomcast\b", r"\bxfinity\b", r"\bspectrum\b",
-    r"\bat&t\b", r"\bverizon\b", r"\bt-mobile\b", r"\bcox\s*communications\b",
-    r"\bphone\s*bill\b",
-    r"\binsurance\b", r"\bpremium\b",
-    r"\btuition\b",
-    r"\bchildcare\b", r"\bday\s*care\b", r"\bdaycare\b",
-]
 
 _PENALTY_FEE = [
     r"\boverdraft\b",
@@ -179,9 +156,14 @@ def _complete_months(ledger: list[dict], today: date) -> list[str]:
 
 
 def _debit_totals_by_month(ledger: list[dict]) -> dict[str, float]:
+    """Spending-only debit totals per month — mirrors the "expenses" figure in
+    the Income/Expenses/Net Cash Flow table (analytics.is_spending_txn), so
+    burn and savings-rate agree with what's shown there. Excludes money
+    movement (credit-card payments, transfers, investment transfers) that
+    would otherwise double-count against the card's own imported purchases."""
     totals: dict[str, float] = defaultdict(float)
     for t in ledger:
-        if t["type"] == TransactionType.debit and not is_transfer(t["description"]):
+        if is_spending_txn(t):
             totals[t["month"]] += t["amount"]
     return totals
 
@@ -400,12 +382,42 @@ def _average_monthly_burn(ledger: list[dict], today: date) -> dict:
         narrative += f" Your 6-month average is ${burn_6mo:,.0f}."
     narrative += f" {today.strftime('%B')} to date: ${month_to_date:,.0f}."
 
+    # Per-month category breakdown + transaction count, for the drill-down —
+    # same is_spending_txn filter as the monthly totals themselves, so the
+    # category amounts sum back to total_debits for that month.
+    window_set = set(window3)
+    cat_totals: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    txn_counts: dict[str, int] = defaultdict(int)
+    for t in ledger:
+        if t["month"] not in window_set or not is_spending_txn(t):
+            continue
+        cat_totals[t["month"]][t["expense_category"] or "other"] += t["amount"]
+        txn_counts[t["month"]] += 1
+
+    monthly_series = []
+    prev_total = None
+    for m in window3:
+        total = round(totals.get(m, 0.0), 2)
+        top_categories = [
+            {"category": cat, "display": primary_display(cat), "amount": round(amt, 2)}
+            for cat, amt in sorted(cat_totals[m].items(), key=lambda kv: kv[1], reverse=True)
+        ]
+        monthly_series.append({
+            "month": m,
+            "total_debits": total,
+            "transaction_count": txn_counts.get(m, 0),
+            "vs_prev_month_pct": round((total - prev_total) / prev_total * 100, 1) if prev_total else None,
+            "top_categories": top_categories,
+        })
+        prev_total = total
+
     return _ok(conf, headline, narrative, {
         "burn_3mo": round(burn_3mo, 2),
         "burn_6mo": round(burn_6mo, 2) if burn_6mo is not None else None,
         "month_to_date": round(month_to_date, 2),
         "months_in_window": len(window3),
-        "monthly_series": [{"month": m, "total_debits": round(totals.get(m, 0.0), 2)} for m in window3],
+        "variance_ratio": round(variance_ratio, 3),
+        "monthly_series": monthly_series,
     })
 
 
@@ -560,7 +572,12 @@ def _fixed_vs_discretionary(ledger: list[dict], today: date) -> dict:
         return _insufficient("Import at least 2 complete months of statements.")
 
     commitments = detect_commitments(ledger, today)
-    commitment_keys = {c["merchant_key"] for c in commitments}
+    # Match by transaction id, not merchant name — a merchant can have both a
+    # detected commitment cluster (e.g. a stable $5,000/mo card payment) and
+    # unrelated one-off charges (e.g. an extra $2,000 payment that month) that
+    # were never part of the pattern. Matching by merchant would sweep those
+    # in too; the commitment's own supporting_transaction_ids are exact.
+    commitment_txn_ids = {tid for c in commitments for tid in c["supporting_transaction_ids"]}
 
     window = complete[-3:]
     window_set = set(window)
@@ -572,22 +589,27 @@ def _fixed_vs_discretionary(ledger: list[dict], today: date) -> dict:
     uncategorized_count = 0
 
     for t in ledger:
-        if t["type"] != TransactionType.debit or t["month"] not in window_set:
+        if t["month"] not in window_set:
             continue
-        if is_transfer(t["description"]):
+        if t["type"] != TransactionType.debit or is_transfer(t["description"]):
             continue
-        total_txn_count += 1
-        if t["expense_category"] in (None, "other"):
-            uncategorized_count += 1
 
-        is_fixed = (
-            _normalize_merchant(t["description"]) in commitment_keys
-            or _matches_any(t["description"], _FIXED_OBLIGATION)
-        )
+        # "Fixed" is exactly the commitment set behind Committed Monthly Spend
+        # (metric 1) — including credit-card-payment commitments, which aren't
+        # "spending" but are still a non-negotiable monthly outflow — so the two
+        # tiles always agree on what counts as committed.
+        is_fixed = t["id"] in commitment_txn_ids
+        spending = is_spending_txn(t)
+
+        if spending:
+            total_txn_count += 1
+            if t["expense_category"] in (None, "other"):
+                uncategorized_count += 1
+
         if is_fixed:
             fixed_by_month[t["month"]] += t["amount"]
             fixed_by_category[t["expense_category"] or "other"] += t["amount"]
-        else:
+        elif spending:
             discretionary_by_month[t["month"]] += t["amount"]
 
     fixed_monthly_avg = sum(fixed_by_month.get(m, 0.0) for m in window) / len(window)

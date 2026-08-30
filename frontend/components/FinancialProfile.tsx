@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { getFinancialProfile } from "@/lib/api";
 import { fmt, formatMonth } from "@/components/MonthlyBreakdown";
 import SectionCard from "@/components/SectionCard";
@@ -216,14 +217,52 @@ function DrillDown({ metricKey, payload }: { metricKey: MetricKey; payload: any 
     case "average_monthly_burn": {
       const p = payload as AverageMonthlyBurnPayload;
       return (
-        <ul className="divide-y divide-gray-100">
-          {p.monthly_series.map((row) => (
-            <li key={row.month} className="py-2 flex items-center justify-between text-sm">
-              <span className="text-gray-500">{formatMonth(row.month)}</span>
-              <span className="tabular-nums text-gray-700">{fmt(row.total_debits)}</span>
-            </li>
-          ))}
-        </ul>
+        <div>
+          <p className="text-xs text-gray-400 mb-2">
+            Month-to-month swing: {(p.variance_ratio * 100).toFixed(0)}%. Click a month to see its transactions.
+          </p>
+          <ul className="divide-y divide-gray-100">
+            {p.monthly_series.map((row) => (
+              <li key={row.month} className="py-2">
+                <div className="flex items-center justify-between text-sm">
+                  <Link
+                    href={`/transactions?month=${row.month}&type=debit`}
+                    className="font-medium text-gray-700 hover:text-blue-700 hover:underline"
+                    title={`View ${formatMonth(row.month)} transactions`}
+                  >
+                    {formatMonth(row.month)}
+                  </Link>
+                  <div className="flex items-center gap-2">
+                    {row.vs_prev_month_pct != null && (
+                      <span className={row.vs_prev_month_pct > 0 ? "text-xs text-red-500" : "text-xs text-green-600"}>
+                        {row.vs_prev_month_pct > 0 ? "+" : ""}
+                        {row.vs_prev_month_pct.toFixed(0)}%
+                      </span>
+                    )}
+                    <span className="tabular-nums text-gray-700">{fmt(row.total_debits)}</span>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {row.transaction_count} transaction{row.transaction_count !== 1 ? "s" : ""}
+                </p>
+                {row.top_categories.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+                    {row.top_categories.slice(0, 5).map((c) => (
+                      <Link
+                        key={c.category}
+                        href={`/transactions?month=${row.month}&category=${encodeURIComponent(c.category)}`}
+                        className="text-xs text-gray-500 hover:text-blue-700 hover:underline"
+                        title={`View ${c.display} transactions in ${formatMonth(row.month)}`}
+                      >
+                        {c.display} {fmt(c.amount)}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
       );
     }
     case "average_monthly_income": {
@@ -318,31 +357,33 @@ function Tile({ metricKey, metric }: { metricKey: MetricKey; metric: ProfileMetr
   const { primary, secondary } = primaryFigure(metricKey, metric.payload);
 
   return (
-    <div
-      className={`rounded-xl border border-gray-200 bg-white p-4 flex flex-col ${
-        expanded ? "sm:col-span-2 lg:col-span-3" : ""
-      }`}
-    >
-      <div className="flex items-start justify-between gap-2 mb-1">
-        <p className="text-xs font-semibold text-gray-500">{METRIC_LABELS[metricKey]}</p>
-        <ConfidenceChip label={metric.confidence_label} />
+    <>
+      <div className="rounded-xl border border-gray-200 bg-white p-4 flex flex-col">
+        <div className="flex items-start justify-between gap-2 mb-1">
+          <p className="text-xs font-semibold text-gray-500">{METRIC_LABELS[metricKey]}</p>
+          <ConfidenceChip label={metric.confidence_label} />
+        </div>
+        <p className="text-xl font-bold text-gray-900">{primary}</p>
+        {secondary && <p className="text-xs text-gray-400 mb-1">{secondary}</p>}
+        <p className="text-xs text-gray-500 flex-1 mt-1">{metric.narrative}</p>
+        <button
+          type="button"
+          onClick={() => setExpanded((prev) => !prev)}
+          className="mt-3 text-xs font-medium text-blue-600 hover:text-blue-700 text-left"
+        >
+          {expanded ? "Hide details" : "Show details"} {expanded ? "▲" : "▼"}
+        </button>
       </div>
-      <p className="text-xl font-bold text-gray-900">{primary}</p>
-      {secondary && <p className="text-xs text-gray-400 mb-1">{secondary}</p>}
-      <p className="text-xs text-gray-500 flex-1 mt-1">{metric.narrative}</p>
-      <button
-        type="button"
-        onClick={() => setExpanded((prev) => !prev)}
-        className="mt-3 text-xs font-medium text-blue-600 hover:text-blue-700 text-left"
-      >
-        {expanded ? "Hide details" : "Show details"} {expanded ? "▲" : "▼"}
-      </button>
       {expanded && (
-        <div className="mt-2 pt-2 border-t border-gray-100">
+        // Own grid item (not nested in the tile) so `grid-flow-row-dense` can
+        // drop it into the next row without changing the tile's own cell —
+        // the tile never moves, and siblings backfill any gap it leaves.
+        <div className="sm:col-span-2 lg:col-span-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
+          <p className="text-xs font-semibold text-gray-500 mb-2">{METRIC_LABELS[metricKey]}</p>
           <DrillDown metricKey={metricKey} payload={metric.payload} />
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -367,7 +408,7 @@ export default function FinancialProfile() {
       description="Standing metrics recomputed from your full ledger after every import."
       accent="blue"
     >
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 grid-flow-row-dense">
         {METRIC_ORDER.map((key) => (
           <Tile key={key} metricKey={key} metric={profile.metrics[key]} />
         ))}
