@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useRouter } from "next/navigation";
 import { uploadStatements } from "@/lib/api";
+import { track } from "@/lib/track";
 
 const MAX_FILES = 10;
 
@@ -80,6 +81,7 @@ export default function FileUploader() {
 
   const handleUpload = async () => {
     if (!uploadable.length) return;
+    track("statement_import_started");
     setUploading(true);
     setError(null);
     setFiles((prev) =>
@@ -104,6 +106,7 @@ export default function FileUploader() {
         /* sessionStorage unavailable — scan still works, just no per-file summary */
       }
       if (result.total_transactions > 0) {
+        track("statement_import_completed");
         router.push(`/import/${result.import_job_id}/scan`);
       } else {
         // Everything was a duplicate. Don't dead-end — point to the existing

@@ -363,19 +363,97 @@ export interface ProfileMetricInsufficient {
   requirement: string;
 }
 
-export type ProfileMetric<TPayload> = ProfileMetricOk<TPayload> | ProfileMetricInsufficient;
+// AMI-66: a metric derived from the Financial Vitals interview instead of
+// the ledger. Deliberately shape-distinct from ProfileMetricOk — no
+// confidence score/label, and its payload never carries transaction IDs.
+export interface ProfileMetricEstimated<TPayload> {
+  status: "estimated";
+  headline: string;
+  narrative: string;
+  payload: TPayload;
+}
+
+export type ProfileMetric<TPayload> =
+  | ProfileMetricOk<TPayload>
+  | ProfileMetricInsufficient
+  | ProfileMetricEstimated<TPayload>;
+
+export interface EstimatedCommittedMonthlySpendPayload {
+  committed_monthly_total: number;
+  committed_annualized_total: number;
+  rent_or_mortgage_monthly: number;
+  car_payment_monthly: number;
+}
+
+export interface EstimatedSpendBreakdownItem {
+  category: "food_and_dining" | "transportation" | "other";
+  monthly_avg: number;
+}
+
+export interface EstimatedAverageMonthlyBurnPayload {
+  monthly_spend_estimate: number;
+  breakdown: EstimatedSpendBreakdownItem[];
+}
+
+export interface EstimatedAverageMonthlyIncomePayload {
+  take_home_pay_monthly: number;
+}
+
+export interface EstimatedFixedVsDiscretionaryPayload {
+  fixed_monthly_avg: number;
+  discretionary_monthly_avg: number;
+  fixed_pct: number;
+  discretionary_pct: number;
+  commitments_exceed_spend: boolean;
+  spend_breakdown: EstimatedSpendBreakdownItem[];
+}
+
+export interface EstimatedSavingsRatePayload {
+  savings_rate: number;
+  take_home_pay_monthly: number;
+  monthly_spend_estimate: number;
+}
+
+export type FinancialProfileSource = "ledger" | "user_estimate" | "none";
 
 export interface FinancialProfile {
   computed_at: string;
   ledger_months_available: number;
+  source: FinancialProfileSource;
+  estimated: boolean;
+  vitals_completed_at?: string;
   metrics: {
-    committed_monthly_spend: ProfileMetric<CommittedMonthlySpendPayload>;
-    average_monthly_burn: ProfileMetric<AverageMonthlyBurnPayload>;
-    average_monthly_income: ProfileMetric<AverageMonthlyIncomePayload>;
-    fixed_vs_discretionary: ProfileMetric<FixedVsDiscretionaryPayload>;
-    savings_rate: ProfileMetric<SavingsRatePayload>;
+    committed_monthly_spend: ProfileMetric<CommittedMonthlySpendPayload | EstimatedCommittedMonthlySpendPayload>;
+    average_monthly_burn: ProfileMetric<AverageMonthlyBurnPayload | EstimatedAverageMonthlyBurnPayload>;
+    average_monthly_income: ProfileMetric<AverageMonthlyIncomePayload | EstimatedAverageMonthlyIncomePayload>;
+    fixed_vs_discretionary: ProfileMetric<FixedVsDiscretionaryPayload | EstimatedFixedVsDiscretionaryPayload>;
+    savings_rate: ProfileMetric<SavingsRatePayload | EstimatedSavingsRatePayload>;
     fees_and_interest: ProfileMetric<FeesAndInterestPayload>;
   };
+}
+
+// ─── Financial Vitals Interview (AMI-66) ───────────────────────────────────────
+
+export interface FinancialVitals {
+  take_home_pay_monthly: number;
+  rent_or_mortgage_monthly: number;
+  car_payment_monthly: number;
+  food_monthly: number;
+  transportation_monthly: number;
+  other_monthly: number;
+  // Derived by the backend as food + transportation + other. Read-only.
+  monthly_spend_estimate: number;
+  completed_at: string;
+  source: "user_estimate";
+}
+
+export interface VitalsInput {
+  take_home_pay_monthly: number;
+  rent_or_mortgage_monthly: number;
+  car_payment_monthly: number;
+  food_monthly: number;
+  transportation_monthly: number;
+  other_monthly: number;
 }
 
 export type FeedbackCategory = "bug" | "feature" | "general";

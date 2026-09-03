@@ -5,6 +5,7 @@ import type {
   FeedbackCategory,
   FeedbackResponse,
   FinancialProfile,
+  FinancialVitals,
   ImportSummary,
   MerchantRule,
   Observation,
@@ -13,6 +14,7 @@ import type {
   UncategorizedAlert,
   UncategorizedRow,
   UploadResult,
+  VitalsInput,
 } from "./types";
 import { clearToken, getToken } from "./auth";
 
@@ -47,6 +49,8 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<Respon
 export interface AuthUser {
   id: number;
   email: string;
+  vitals_prompt_dismissed: boolean;
+  vitals_interview_enabled: boolean;
 }
 
 export interface AuthResponse {
@@ -102,6 +106,11 @@ export async function resetPassword(token: string, newPassword: string): Promise
 
 export async function getMe(): Promise<AuthUser> {
   const res = await apiFetch("/api/auth/me");
+  return handleResponse<AuthUser>(res);
+}
+
+export async function dismissVitalsPrompt(): Promise<AuthUser> {
+  const res = await apiFetch("/api/auth/dismiss-vitals-prompt", { method: "POST" });
   return handleResponse<AuthUser>(res);
 }
 
@@ -264,6 +273,23 @@ export async function getSummaryInsights(): Promise<DashboardInsight[]> {
 export async function getFinancialProfile(): Promise<FinancialProfile> {
   const res = await apiFetch(`/api/financial-profile`);
   return handleResponse<FinancialProfile>(res);
+}
+
+// ─── Financial Vitals Interview (AMI-66) ───────────────────────────────────────
+
+export async function getFinancialVitals(): Promise<FinancialVitals | null> {
+  const res = await apiFetch("/api/financial-vitals");
+  if (res.status === 404) return null;
+  return handleResponse<FinancialVitals>(res);
+}
+
+export async function saveFinancialVitals(input: VitalsInput): Promise<FinancialVitals> {
+  const res = await apiFetch("/api/financial-vitals", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return handleResponse<FinancialVitals>(res);
 }
 
 // ─── Account data ───────────────────────────────────────────────────────────

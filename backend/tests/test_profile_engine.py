@@ -1,4 +1,5 @@
-from datetime import date
+from datetime import date, datetime
+from app.models.financial_vitals import FinancialVitals
 from app.models.transaction import TransactionType
 
 from app.services import profile_engine
@@ -335,3 +336,121 @@ def test_fees_and_interest_classifies_subtypes(make_txn):
     assert payload["ytd_total"] == 147.5
     subtypes = {b["sub_type"]: b["ytd_total"] for b in payload["breakdown"]}
     assert subtypes == {"penalty_fees": 35.0, "interest": 12.5, "bank_fees": 5.0, "card_fees": 95.0}
+
+
+# ─── Financial Vitals estimate path (AMI-66) ───────────────────────────────────
+
+def _make_vitals(session, user_id=TEST_USER_ID, take_home=600000, rent=180000, car=45000,
+                  food=0, transportation=0, other=420000):
+    v = FinancialVitals(
+        user_id=user_id,
+        take_home_pay_monthly_cents=take_home,
+        rent_or_mortgage_monthly_cents=rent,
+        car_payment_monthly_cents=car,
+        food_monthly_cents=food,
+        transportation_monthly_cents=transportation,
+        other_spend_monthly_cents=other,
+        completed_at=datetime(2026, 8, 1),
+    )
+    session.add(v)
+    session.commit()
+    return v
+
+
+def test_source_is_none_with_no_ledger_and_no_vitals(session):
+    profile = _profile(session)
+    assert profile["source"] == "none"
+    assert profile["estimated"] is False
+
+
+def test_source_is_user_estimate_with_vitals_only(session):
+    _make_vitals(session)
+    profile = _profile(session)
+    assert profile["source"] == "user_estimate"
+    assert profile["estimated"] is True
+    assert profile["vitals_completed_at"]
+
+
+def test_source_is_ledger_when_ledger_exists(make_txn):
+    make_txn(day="2026-06-01", amount=1500.00, txn_type=TransactionType.debit, description="RENT", expense_category="housing")
+    _make_vitals(make_txn.__self_session__)
+    profile = _profile(make_txn.__self_session__)
+    assert profile["source"] == "ledger"
+    assert profile["estimated"] is False
+
+
+def test_source_falls_back_to_vitals_when_ledger_transactions_are_all_duplicates(make_txn):
+    make_txn(day="2026-06-01", amount=1500.00, txn_type=TransactionType.debit, description="RENT",
+              expense_category="housing", is_duplicate=True)
+    _make_vitals(make_txn.__self_session__)
+    profile = _profile(make_txn.__self_session__)
+    assert profile["source"] == "user_estimate"
+
+
+def test_estimate_metrics_have_no_transaction_ids_and_fees_insufficient(session):
+    _make_vitals(session)
+    metrics = _profile(session)["metrics"]
+    for key in ("committed_monthly_spend", "average_monthly_burn", "average_monthly_income", "fixed_vs_discretionary", "savings_rate"):
+        m = metrics[key]
+        assert m["status"] == "estimated"
+        assert "confidence" not in m
+        assert "supporting_transaction_ids" not in m["payload"]
+    assert metrics["fees_and_interest"]["status"] == "insufficient_data"
+
+
+def test_estimate_formulas_match_spec_example(session):
+    _make_vitals(session, take_home=600000, rent=180000, car=45000,
+                 food=80000, transportation=20000, other=320000)
+    metrics = _profile(session)["metrics"]
+
+    committed = metrics["committed_monthly_spend"]["payload"]
+    assert committed["committed_monthly_total"] == 2250.0
+    assert committed["committed_annualized_total"] == 27000.0
+
+    burn = metrics["average_monthly_burn"]["payload"]
+    assert burn["monthly_spend_estimate"] == 4200.0
+    assert {b["category"]: b["monthly_avg"] for b in burn["breakdown"]} == {
+        "food_and_dining": 800.0,
+        "transportation": 200.0,
+        "other": 3200.0,
+    }
+    assert metrics["average_monthly_income"]["payload"]["take_home_pay_monthly"] == 6000.0
+
+    fixed = metrics["fixed_vs_discretionary"]["payload"]
+    assert round(fixed["fixed_pct"]) == 54
+    assert round(fixed["discretionary_pct"]) == 46
+    assert fixed["commitments_exceed_spend"] is False
+
+    savings = metrics["savings_rate"]["payload"]
+    assert round(savings["savings_rate"], 2) == 0.3
+
+    assert round(metrics["savings_rate"]["payload"]["savings_rate"] * 100) == 30
+
+
+def test_estimate_zero_commitments(session):
+    _make_vitals(session, rent=0, car=0)
+    metrics = _profile(session)["metrics"]
+    committed = metrics["committed_monthly_spend"]["payload"]
+    assert committed["committed_monthly_total"] == 0.0
+    fixed = metrics["fixed_vs_discretionary"]["payload"]
+    assert fixed["fixed_pct"] == 0.0
+    assert fixed["discretionary_pct"] == 100.0
+
+
+def test_estimate_commitments_exceed_spend_caps_fixed_pct_at_100(session):
+    _make_vitals(session, take_home=600000, rent=300000, car=200000, other=400000)
+    metrics = _profile(session)["metrics"]
+    fixed = metrics["fixed_vs_discretionary"]["payload"]
+    assert fixed["commitments_exceed_spend"] is True
+    assert fixed["fixed_pct"] == 100.0
+    assert fixed["discretionary_pct"] == 0.0
+    assert fixed["discretionary_monthly_avg"] == 0.0
+    assert metrics["fixed_vs_discretionary"]["narrative"] == "Your commitments are higher than your total-spend estimate."
+
+
+def test_estimate_negative_savings_rate_is_signed_not_floored(session):
+    _make_vitals(session, take_home=400000, other=500000)
+    metrics = _profile(session)["metrics"]
+    savings = metrics["savings_rate"]["payload"]
+    assert savings["savings_rate"] < 0
+    assert round(savings["savings_rate"], 2) == -0.25

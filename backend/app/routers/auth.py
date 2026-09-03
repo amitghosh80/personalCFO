@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr, field_validator
@@ -66,7 +67,12 @@ class ResetPasswordRequest(BaseModel):
 
 
 def _user_out(user: User) -> dict:
-    return {"id": user.id, "email": user.email}
+    return {
+        "id": user.id,
+        "email": user.email,
+        "vitals_prompt_dismissed": user.vitals_prompt_dismissed_at is not None,
+        "vitals_interview_enabled": get_settings().vitals_interview_enabled,
+    }
 
 
 def _claim_legacy_data(session: Session, user_id: int) -> None:
@@ -154,6 +160,22 @@ def google_signin(request: Request, body: GoogleAuthRequest, session: Session = 
 
 @router.get("/me")
 def me(current_user: User = Depends(get_current_user)):
+    return _user_out(current_user)
+
+
+@router.post("/dismiss-vitals-prompt")
+def dismiss_vitals_prompt(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Marks the first-run choice screen (AMI-66) as dismissed so it doesn't
+    reappear on later /app visits — called when the user picks "Import a
+    statement" instead of the vitals interview."""
+    if current_user.vitals_prompt_dismissed_at is None:
+        current_user.vitals_prompt_dismissed_at = datetime.utcnow()
+        session.add(current_user)
+        session.commit()
+        session.refresh(current_user)
     return _user_out(current_user)
 
 

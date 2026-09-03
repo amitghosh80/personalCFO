@@ -12,11 +12,13 @@ import statistics
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
+from ..models.financial_vitals import FinancialVitals
 from ..models.transaction import TransactionType
 from .analytics import load_ledger, is_transfer, is_spending_txn, _norm as _normalize_merchant
 from .expense_categorizer import primary_display
+from .vitals_service import cents_to_dollars, total_spend_cents
 
 # ─── Pattern lists ─────────────────────────────────────────────────────────────
 
@@ -147,6 +149,14 @@ def _ok(confidence: float, headline: str, narrative: str, payload: dict) -> dict
 
 def _insufficient(requirement: str) -> dict:
     return {"status": "insufficient_data", "requirement": requirement}
+
+
+def _estimated(headline: str, narrative: str, payload: dict) -> dict:
+    """A metric derived from the user's Financial Vitals interview answers
+    (AMI-66), not the ledger. Deliberately shape-distinct from `_ok()` — no
+    confidence score/label and no transaction IDs, since none exist for a
+    user estimate."""
+    return {"status": "estimated", "headline": headline, "narrative": narrative, "payload": payload}
 
 
 def _txn_summaries(items: list[dict]) -> list[dict]:
@@ -801,22 +811,130 @@ def _fees_and_interest(ledger: list[dict], today: date) -> dict:
     })
 
 
+# ─── Financial Vitals estimate path (AMI-66) ───────────────────────────────────
+
+def _estimate_profile(vitals: FinancialVitals) -> dict:
+    """Same six metric keys as the ledger path, computed from the four
+    Financial Vitals answers instead of transactions. No transaction IDs,
+    merchant breakdowns, cadence, or confidence scores — uncertainty is
+    communicated by the `estimated` flag on the envelope, not per metric."""
+    take_home_pay = cents_to_dollars(vitals.take_home_pay_monthly_cents)
+    rent = cents_to_dollars(vitals.rent_or_mortgage_monthly_cents)
+    car = cents_to_dollars(vitals.car_payment_monthly_cents)
+    food = cents_to_dollars(vitals.food_monthly_cents)
+    transportation = cents_to_dollars(vitals.transportation_monthly_cents)
+    other = cents_to_dollars(vitals.other_spend_monthly_cents)
+    monthly_spend = cents_to_dollars(total_spend_cents(vitals))
+    spend_breakdown = [
+        {"category": "food_and_dining", "monthly_avg": round(food, 2)},
+        {"category": "transportation", "monthly_avg": round(transportation, 2)},
+        {"category": "other", "monthly_avg": round(other, 2)},
+    ]
+
+    committed = rent + car
+    fixed = committed
+    discretionary = max(monthly_spend - fixed, 0.0)
+    commitments_exceed_spend = fixed > monthly_spend
+    fixed_pct = min((fixed / monthly_spend * 100) if monthly_spend else 0.0, 100.0)
+    discretionary_pct = 100.0 - fixed_pct if monthly_spend else 0.0
+    savings_rate = (take_home_pay - monthly_spend) / take_home_pay if take_home_pay else 0.0
+
+    return {
+        "committed_monthly_spend": _estimated(
+            headline=f"Estimated committed monthly spend: ${committed:,.0f}/mo",
+            narrative="Based on the rent/mortgage and car payment you entered.",
+            payload={
+                "committed_monthly_total": round(committed, 2),
+                "committed_annualized_total": round(committed * 12, 2),
+                "rent_or_mortgage_monthly": round(rent, 2),
+                "car_payment_monthly": round(car, 2),
+            },
+        ),
+        "average_monthly_burn": _estimated(
+            headline=f"Estimated monthly burn: ${monthly_spend:,.0f}/mo",
+            narrative="Based on the food, transportation, and other spending you entered.",
+            payload={
+                "monthly_spend_estimate": round(monthly_spend, 2),
+                "breakdown": spend_breakdown,
+            },
+        ),
+        "average_monthly_income": _estimated(
+            headline=f"Estimated take-home income: ${take_home_pay:,.0f}/mo",
+            narrative="Based on the take-home pay you entered, not gross income.",
+            payload={"take_home_pay_monthly": round(take_home_pay, 2)},
+        ),
+        "fixed_vs_discretionary": _estimated(
+            headline=f"Estimated {fixed_pct:.0f}% fixed / {discretionary_pct:.0f}% discretionary",
+            narrative=(
+                "Your commitments are higher than your total-spend estimate."
+                if commitments_exceed_spend
+                else "Fixed commitments vs. the rest of your estimated spend."
+            ),
+            payload={
+                "fixed_monthly_avg": round(fixed, 2),
+                "discretionary_monthly_avg": round(discretionary, 2),
+                "fixed_pct": round(fixed_pct, 1),
+                "discretionary_pct": round(discretionary_pct, 1),
+                "commitments_exceed_spend": commitments_exceed_spend,
+                "spend_breakdown": spend_breakdown,
+            },
+        ),
+        "savings_rate": _estimated(
+            headline=f"Estimated savings rate: {savings_rate * 100:.0f}%",
+            narrative="Based on estimated take-home pay minus estimated monthly spend.",
+            payload={
+                "savings_rate": round(savings_rate, 4),
+                "take_home_pay_monthly": round(take_home_pay, 2),
+                "monthly_spend_estimate": round(monthly_spend, 2),
+            },
+        ),
+        "fees_and_interest": _insufficient("insufficient_data"),
+    }
+
+
 # ─── Orchestrator ──────────────────────────────────────────────────────────────
+
+def _ledger_metrics(ledger: list[dict], today: date) -> dict:
+    return {
+        "committed_monthly_spend": _committed_monthly_spend(ledger, today),
+        "average_monthly_burn": _average_monthly_burn(ledger, today),
+        "average_monthly_income": _average_monthly_income(ledger, today),
+        "fixed_vs_discretionary": _fixed_vs_discretionary(ledger, today),
+        "savings_rate": _savings_rate(ledger, today),
+        "fees_and_interest": _fees_and_interest(ledger, today),
+    }
+
 
 def get_financial_profile(session: Session, user_id: int, today: date | None = None) -> dict:
     today = today or date.today()
     ledger = load_ledger(session, user_id)
     months_available = len({t["month"] for t in ledger})
+    computed_at = datetime.utcnow().isoformat() + "Z"
+
+    if ledger:
+        return {
+            "computed_at": computed_at,
+            "ledger_months_available": months_available,
+            "source": "ledger",
+            "estimated": False,
+            "metrics": _ledger_metrics(ledger, today),
+        }
+
+    vitals = session.exec(select(FinancialVitals).where(FinancialVitals.user_id == user_id)).first()
+    if vitals is not None:
+        return {
+            "computed_at": computed_at,
+            "ledger_months_available": 0,
+            "source": "user_estimate",
+            "estimated": True,
+            "vitals_completed_at": vitals.completed_at.isoformat() + "Z",
+            "metrics": _estimate_profile(vitals),
+        }
 
     return {
-        "computed_at": datetime.utcnow().isoformat() + "Z",
-        "ledger_months_available": months_available,
-        "metrics": {
-            "committed_monthly_spend": _committed_monthly_spend(ledger, today),
-            "average_monthly_burn": _average_monthly_burn(ledger, today),
-            "average_monthly_income": _average_monthly_income(ledger, today),
-            "fixed_vs_discretionary": _fixed_vs_discretionary(ledger, today),
-            "savings_rate": _savings_rate(ledger, today),
-            "fees_and_interest": _fees_and_interest(ledger, today),
-        },
+        "computed_at": computed_at,
+        "ledger_months_available": 0,
+        "source": "none",
+        "estimated": False,
+        "metrics": _ledger_metrics(ledger, today),
     }

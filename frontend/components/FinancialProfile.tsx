@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getFinancialProfile } from "@/lib/api";
+import { track } from "@/lib/track";
 import { fmt, formatMonth } from "@/components/MonthlyBreakdown";
 import SectionCard from "@/components/SectionCard";
 import { EXPENSE_LABELS } from "@/components/TransactionTable";
@@ -13,6 +14,11 @@ import type {
   CommitmentOccurrence,
   CommittedMonthlySpendPayload,
   ConfidenceLabel,
+  EstimatedAverageMonthlyBurnPayload,
+  EstimatedAverageMonthlyIncomePayload,
+  EstimatedCommittedMonthlySpendPayload,
+  EstimatedFixedVsDiscretionaryPayload,
+  EstimatedSavingsRatePayload,
   FeesAndInterestPayload,
   FinancialProfile as FinancialProfileType,
   FixedBreakdownGroup,
@@ -39,6 +45,14 @@ function ConfidenceChip({ label }: { label: ConfidenceLabel }) {
   return (
     <span className={`shrink-0 text-[11px] font-medium px-1.5 py-0.5 rounded ${CONFIDENCE_STYLES[label]}`}>
       {label[0].toUpperCase() + label.slice(1)}
+    </span>
+  );
+}
+
+function EstimatedChip() {
+  return (
+    <span className="shrink-0 text-[11px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
+      Estimated
     </span>
   );
 }
@@ -89,6 +103,106 @@ function primaryFigure(key: MetricKey, payload: any): { primary: string; seconda
       const p = payload as FeesAndInterestPayload;
       return { primary: `${money(p.ytd_total)} YTD`, secondary: p.trailing_12mo_total != null ? `${money(p.trailing_12mo_total)}/12mo` : undefined };
     }
+  }
+}
+
+function estimatedPrimaryFigure(key: MetricKey, payload: any): { primary: string; secondary?: string } {
+  switch (key) {
+    case "committed_monthly_spend": {
+      const p = payload as EstimatedCommittedMonthlySpendPayload;
+      return { primary: `${money(p.committed_monthly_total)}/mo`, secondary: `${money(p.committed_annualized_total)}/yr` };
+    }
+    case "average_monthly_burn": {
+      const p = payload as EstimatedAverageMonthlyBurnPayload;
+      return { primary: `${money(p.monthly_spend_estimate)}/mo` };
+    }
+    case "average_monthly_income": {
+      const p = payload as EstimatedAverageMonthlyIncomePayload;
+      return { primary: `${money(p.take_home_pay_monthly)}/mo` };
+    }
+    case "fixed_vs_discretionary": {
+      const p = payload as EstimatedFixedVsDiscretionaryPayload;
+      return { primary: `${p.fixed_pct.toFixed(0)}% fixed`, secondary: `${p.discretionary_pct.toFixed(0)}% discretionary` };
+    }
+    case "savings_rate": {
+      const p = payload as EstimatedSavingsRatePayload;
+      return { primary: `${(p.savings_rate * 100).toFixed(0)}%` };
+    }
+    case "fees_and_interest":
+      return { primary: "—" };
+  }
+}
+
+const SPEND_CATEGORY_LABELS: Record<string, string> = {
+  food_and_dining: "Food & dining",
+  transportation: "Transportation",
+  other: "Everything else",
+};
+
+function SpendBreakdownList({ items }: { items: { category: string; monthly_avg: number }[] }) {
+  return (
+    <ul className="mt-2 divide-y divide-gray-100">
+      {items.map((b) => (
+        <li key={b.category} className="py-1.5 flex items-center justify-between text-sm">
+          <span className="text-gray-600">{SPEND_CATEGORY_LABELS[b.category] ?? b.category}</span>
+          <span className="tabular-nums text-gray-700">{money(b.monthly_avg)}/mo</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function HowThisWasEstimated({ metricKey, payload }: { metricKey: MetricKey; payload: any }) {
+  switch (metricKey) {
+    case "committed_monthly_spend": {
+      const p = payload as EstimatedCommittedMonthlySpendPayload;
+      return (
+        <p className="text-sm text-gray-600">
+          Rent/mortgage ({money(p.rent_or_mortgage_monthly)}) + car payment ({money(p.car_payment_monthly)}) ={" "}
+          {money(p.committed_monthly_total)}/mo.
+        </p>
+      );
+    }
+    case "average_monthly_burn": {
+      const p = payload as EstimatedAverageMonthlyBurnPayload;
+      return (
+        <div>
+          <p className="text-sm text-gray-600">
+            You estimated {money(p.monthly_spend_estimate)}/mo total, broken down as:
+          </p>
+          <SpendBreakdownList items={p.breakdown} />
+        </div>
+      );
+    }
+    case "average_monthly_income": {
+      const p = payload as EstimatedAverageMonthlyIncomePayload;
+      return <p className="text-sm text-gray-600">You estimated take-home pay of {money(p.take_home_pay_monthly)}/mo.</p>;
+    }
+    case "fixed_vs_discretionary": {
+      const p = payload as EstimatedFixedVsDiscretionaryPayload;
+      return (
+        <div>
+          <p className="text-sm text-gray-600">
+            Fixed = rent/mortgage + car payment ({money(p.fixed_monthly_avg)}/mo). Discretionary = estimated total spend minus
+            fixed ({money(p.discretionary_monthly_avg)}/mo).
+            {p.commitments_exceed_spend && " Your commitments are higher than your total-spend estimate, so discretionary is shown as $0."}
+          </p>
+          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-gray-400">You estimated spending</p>
+          <SpendBreakdownList items={p.spend_breakdown} />
+        </div>
+      );
+    }
+    case "savings_rate": {
+      const p = payload as EstimatedSavingsRatePayload;
+      return (
+        <p className="text-sm text-gray-600">
+          ({money(p.take_home_pay_monthly)} take-home − {money(p.monthly_spend_estimate)} spend) ÷{" "}
+          {money(p.take_home_pay_monthly)} take-home = {(p.savings_rate * 100).toFixed(0)}%.
+        </p>
+      );
+    }
+    case "fees_and_interest":
+      return null;
   }
 }
 
@@ -489,6 +603,38 @@ function Tile({ metricKey, metric }: { metricKey: MetricKey; metric: ProfileMetr
     );
   }
 
+  if (metric.status === "estimated") {
+    const { primary, secondary } = estimatedPrimaryFigure(metricKey, metric.payload);
+    return (
+      <>
+        <div className="rounded-xl border border-amber-200 bg-white p-4 flex flex-col">
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <p className="text-xs font-semibold text-gray-500">{METRIC_LABELS[metricKey]}</p>
+            <EstimatedChip />
+          </div>
+          <p className="text-xl font-bold text-gray-900">{primary}</p>
+          {secondary && <p className="text-xs text-gray-400 mb-1">{secondary}</p>}
+          <p className="text-xs text-gray-500 flex-1 mt-1">{metric.narrative}</p>
+          {metricKey !== "fees_and_interest" && (
+            <button
+              type="button"
+              onClick={() => setExpanded((prev) => !prev)}
+              className="mt-3 text-xs font-medium text-blue-600 hover:text-blue-700 text-left"
+            >
+              {expanded ? "Hide how this was estimated" : "How this was estimated"} {expanded ? "▲" : "▼"}
+            </button>
+          )}
+        </div>
+        {expanded && (
+          <div className="sm:col-span-2 lg:col-span-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
+            <p className="text-xs font-semibold text-gray-500 mb-2">{METRIC_LABELS[metricKey]}</p>
+            <HowThisWasEstimated metricKey={metricKey} payload={metric.payload} />
+          </div>
+        )}
+      </>
+    );
+  }
+
   const { primary, secondary } = primaryFigure(metricKey, metric.payload);
 
   return (
@@ -532,24 +678,57 @@ export default function FinancialProfile() {
 
   useEffect(() => {
     // Best-effort: the profile module is progressive enhancement, never blocks the page.
-    getFinancialProfile().then(setProfile).catch(() => {});
+    getFinancialProfile()
+      .then((p) => {
+        setProfile(p);
+        if (p.estimated) track("profile_estimated_viewed");
+      })
+      .catch(() => {});
   }, []);
 
   if (!profile) return null;
 
+  const estimated = profile.estimated;
+
   return (
     <SectionCard
       title="Financial Profile"
-      description="Standing metrics recomputed from your full ledger after every import."
-      accent="blue"
+      description={
+        estimated
+          ? "Based on your estimates. Import one statement to replace these with real numbers."
+          : "Standing metrics recomputed from your full ledger after every import."
+      }
+      accent={estimated ? "violet" : "blue"}
     >
+      {estimated && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <EstimatedChip />
+            <span className="text-sm text-amber-900">These are guesses from your answers, not verified financial facts.</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <Link href="/profile/vitals" className="text-sm font-medium text-amber-800 hover:text-amber-900 hover:underline">
+              Update my estimates
+            </Link>
+            <Link
+              href="/app"
+              onClick={() => track("import_cta_clicked", { source: "estimated_profile" })}
+              className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline"
+            >
+              Import a statement to see your real numbers
+            </Link>
+          </div>
+        </div>
+      )}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 grid-flow-row-dense">
         {METRIC_ORDER.map((key) => (
           <Tile key={key} metricKey={key} metric={profile.metrics[key]} />
         ))}
       </div>
       <p className="mt-3 text-[11px] text-gray-400">
-        Automated, based on your imported data — not financial advice. Verify before acting.
+        {estimated
+          ? "Based on your answers to four questions — not financial advice. Import a statement for real numbers."
+          : "Automated, based on your imported data — not financial advice. Verify before acting."}
       </p>
     </SectionCard>
   );

@@ -14,6 +14,7 @@ from .routers import auth
 from .routers import health
 from .routers import feedback
 from .routers import financial_profile
+from .routers import financial_vitals
 
 configure_logging()
 init_error_reporting(_get_settings())
@@ -48,3 +49,4 @@ app.include_router(chat.router)
 app.include_router(categories.router)
 app.include_router(feedback.router)
 app.include_router(financial_profile.router)
+app.include_router(financial_vitals.router)

@@ -7,6 +7,7 @@ from .user import User
 from .chat_usage import ChatUsage
 from .feedback import Feedback
 from .password_reset_token import PasswordResetToken
+from .financial_vitals import FinancialVitals
 
 __all__ = [
     "Transaction", "TransactionType", "IncomeCategory",
@@ -18,4 +19,5 @@ __all__ = [
     "ChatUsage",
     "Feedback",
     "PasswordResetToken",
+    "FinancialVitals",
 ]

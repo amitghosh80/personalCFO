@@ -41,6 +41,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <a href="/summary" className="text-sm text-blue-600 hover:text-blue-800 transition-colors">
               View import
             </a>
+            <a href="/profile" className="text-sm text-blue-600 hover:text-blue-800 transition-colors">
+              Profile
+            </a>
             <a href="/transactions" className="text-sm text-blue-600 hover:text-blue-800 transition-colors">
               Transactions
             </a>
