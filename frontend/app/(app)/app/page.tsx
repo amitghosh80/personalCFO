@@ -25,12 +25,11 @@ export default function ImportPage() {
           setScreen("uploader");
           return;
         }
-        if (profile.source === "ledger") {
+        if (profile.source === "ledger" || profile.source === "user_estimate") {
+          // Already past the first-run choice (either imported or completed
+          // the interview) — /app is now just the Import page, reached via
+          // the nav link or the estimated Profile's CTA. Never bounce away.
           setScreen("uploader");
-          return;
-        }
-        if (profile.source === "user_estimate") {
-          router.replace("/profile");
           return;
         }
         if (me.vitals_prompt_dismissed) {
