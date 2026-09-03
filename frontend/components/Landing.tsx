@@ -161,7 +161,7 @@ export default function Landing() {
               href="/signup"
               className="text-sm font-semibold px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
             >
-              Upload a statement
+              Sign up free
             </Link>
           </div>
         </nav>
@@ -183,7 +183,7 @@ export default function Landing() {
                 href="/signup"
                 className="px-6 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors"
               >
-                Upload your first statement
+                Sign up free
               </Link>
               <a
                 href="#how-it-works"
@@ -440,7 +440,7 @@ export default function Landing() {
               href="/signup"
               className="inline-block px-8 py-4 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-500 transition-colors"
             >
-              Upload your first statement — free
+              Create your free account
             </Link>
           </div>
           <p className="mt-4 text-sm text-gray-400">Free account, no bank login required. Takes about 3 minutes.</p>
