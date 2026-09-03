@@ -294,6 +294,16 @@ def clear_all_data(
 
     for row in (*txns, *jobs, *insights):
         session.delete(row)
+
+    # Wiping the ledger returns the account to the AMI-66 eligibility
+    # definition (no vitals, no ledger) — re-arm the first-run choice screen
+    # so a user who never did the interview can reach it again, instead of
+    # being stuck on the uploader forever because of a stale dismissal from
+    # before they had any data.
+    if current_user.vitals_prompt_dismissed_at is not None:
+        current_user.vitals_prompt_dismissed_at = None
+        session.add(current_user)
+
     session.commit()
 
     return {
