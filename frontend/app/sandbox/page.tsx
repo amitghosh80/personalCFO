@@ -22,16 +22,19 @@ function Banner() {
   return (
     <div className="bg-blue-600 text-white">
       <div className="max-w-5xl mx-auto px-6 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-        <Link href="/" className="text-sm font-bold tracking-tight shrink-0">
+        <Link href="/" className="text-sm font-bold tracking-tight shrink-0 order-1">
           personal<span className="text-blue-200">CFO</span>
         </Link>
-        <p className="text-sm flex-1 min-w-0">
+        <Link
+          href="/signup"
+          className="text-sm font-semibold underline hover:no-underline shrink-0 order-2 sm:order-3"
+        >
+          Sign up free to build your own
+        </Link>
+        <p className="text-sm order-3 sm:order-2 basis-full sm:basis-auto sm:flex-1 sm:min-w-0">
           You&apos;re viewing <span className="font-semibold">Jordan</span> — a fictional example account with
           sample data.
         </p>
-        <Link href="/signup" className="text-sm font-semibold underline hover:no-underline shrink-0">
-          Sign up free to build your own
-        </Link>
       </div>
     </div>
   );
