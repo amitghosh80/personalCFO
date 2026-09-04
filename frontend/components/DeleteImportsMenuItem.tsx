@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { clearAllData } from "@/lib/api";
 
-export default function DeleteImportsMenuItem() {
+export default function DeleteImportsMenuItem({ className }: { className?: string } = {}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
@@ -37,7 +37,7 @@ export default function DeleteImportsMenuItem() {
           setError(null);
           setOpen(true);
         }}
-        className="text-sm text-gray-500 hover:text-red-600 transition-colors"
+        className={className ?? "text-sm text-gray-500 hover:text-red-600 transition-colors"}
       >
         Delete previous imports
       </button>

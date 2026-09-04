@@ -1,4 +1,6 @@
 import Link from "next/link";
+import LandingNav from "@/components/LandingNav";
+import Wordmark from "@/components/Wordmark";
 
 /**
  * Marketing landing page (PRD F6). Server component — no client JS needed:
@@ -130,42 +132,11 @@ const LEDGER: { date: string; merchant: string; amount: string; credit?: boolean
   { date: "Jun 7", merchant: "Netflix", amount: "−$15.49", cat: "Subscriptions", cls: "bg-violet-100 text-violet-700" },
 ];
 
-function Wordmark({ className = "" }: { className?: string }) {
-  return (
-    <span className={`font-bold tracking-tight ${className}`}>
-      personal<span className="text-blue-600">CFO</span>
-    </span>
-  );
-}
-
 export default function Landing() {
   return (
     <div className="text-gray-900">
       {/* 5.1 Navigation */}
-      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-gray-200">
-        <nav className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <a href="#top" className="text-lg">
-            <Wordmark />
-          </a>
-          <div className="flex items-center gap-6">
-            <a href="#features" className="hidden sm:inline text-sm text-gray-600 hover:text-gray-900 transition-colors">
-              Features
-            </a>
-            <a href="#how-it-works" className="hidden sm:inline text-sm text-gray-600 hover:text-gray-900 transition-colors">
-              How it works
-            </a>
-            <a href="#security" className="hidden sm:inline text-sm text-gray-600 hover:text-gray-900 transition-colors">
-              Security
-            </a>
-            <Link
-              href="/signup"
-              className="text-sm font-semibold px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-            >
-              Sign up free
-            </Link>
-          </div>
-        </nav>
-      </header>
+      <LandingNav />
 
       {/* 5.2 Hero */}
       <section id="top" className="bg-white">

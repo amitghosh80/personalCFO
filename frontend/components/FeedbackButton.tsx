@@ -13,7 +13,7 @@ const CATEGORIES: { value: FeedbackCategory; label: string }[] = [
 
 const MAX_ATTACHMENT_MB = 5;
 
-export default function FeedbackButton() {
+export default function FeedbackButton({ className }: { className?: string } = {}) {
   const pathname = usePathname();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -72,7 +72,7 @@ export default function FeedbackButton() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="text-sm text-blue-600 hover:text-blue-800 transition-colors"
+        className={className ?? "text-sm text-blue-600 hover:text-blue-800 transition-colors"}
       >
         Feedback
       </button>
