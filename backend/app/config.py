@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     # No staged-rollout mechanism exists yet — flip to False to hide the
     # interview path entirely and fall back to upload-only onboarding.
     vitals_interview_enabled: bool = True
+    # Shared daily cap across ALL sandbox-mode visitors combined (they share
+    # one demo user id), to bound Anthropic API cost from a public, unauthenticated
+    # chat surface.
+    sandbox_chat_daily_limit: int = 200
 
     class Config:
         env_file = ".env"

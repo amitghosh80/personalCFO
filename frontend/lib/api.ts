@@ -305,6 +305,45 @@ export async function clearAllData(): Promise<ClearDataResult> {
   return handleResponse<ClearDataResult>(res);
 }
 
+// ─── Sandbox (Jordan demo persona) ─────────────────────────────────────────────
+// Deliberately does NOT go through apiFetch: sandbox is unauthenticated by
+// design, and apiFetch's global 401-redirect-to-/login would break an
+// anonymous visitor who never had a token to begin with.
+
+export async function getSandboxFinancialProfile(): Promise<FinancialProfile> {
+  const res = await fetch(`${API}/api/sandbox/financial-profile`);
+  return handleResponse<FinancialProfile>(res);
+}
+
+export async function getSandboxTransactions(): Promise<Transaction[]> {
+  const res = await fetch(`${API}/api/sandbox/transactions`);
+  return handleResponse<Transaction[]>(res);
+}
+
+export async function getSandboxInsights(): Promise<DashboardInsight[]> {
+  const res = await fetch(`${API}/api/sandbox/insights`);
+  const body = await handleResponse<{ insights: DashboardInsight[] }>(res);
+  return body.insights;
+}
+
+export async function getSandboxStarterQuestions(): Promise<string[]> {
+  const res = await fetch(`${API}/api/sandbox/chat/starters`);
+  const body = await handleResponse<{ questions: string[] }>(res);
+  return body.questions;
+}
+
+export async function sendSandboxChatMessage(
+  question: string,
+  history: ChatMessage[]
+): Promise<ChatResponse> {
+  const res = await fetch(`${API}/api/sandbox/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, history }),
+  });
+  return handleResponse<ChatResponse>(res);
+}
+
 // ─── Feedback ───────────────────────────────────────────────────────────────
 
 export async function submitFeedback(

@@ -1,11 +1,16 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from sqlmodel import Session
 from .config import get_settings as _get_settings
+from .database import get_engine
 from .error_reporting import init_error_reporting
 from .logging_config import configure_logging
 from .rate_limit import limiter
+from .services.demo_seed import ensure_demo_data
 from .routers import upload, transactions
 from .routers import insights
 from .routers import chat
@@ -15,6 +20,7 @@ from .routers import health
 from .routers import feedback
 from .routers import financial_profile
 from .routers import financial_vitals
+from .routers import sandbox
 
 configure_logging()
 init_error_reporting(_get_settings())
@@ -50,3 +56,15 @@ app.include_router(categories.router)
 app.include_router(feedback.router)
 app.include_router(financial_profile.router)
 app.include_router(financial_vitals.router)
+app.include_router(sandbox.router)
+
+
+@app.on_event("startup")
+def _seed_sandbox_demo_data() -> None:
+    """Best-effort: the sandbox demo is a supporting feature, never a reason
+    for the whole app to fail to start."""
+    try:
+        with Session(get_engine()) as session:
+            ensure_demo_data(session)
+    except Exception:
+        logging.getLogger("personalcfo.sandbox").exception("Failed to seed sandbox demo data")

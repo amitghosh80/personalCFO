@@ -673,17 +673,22 @@ function Tile({ metricKey, metric }: { metricKey: MetricKey; metric: ProfileMetr
  * Important page. Unlike the episodic Insight Feed, these never dismiss; they
  * recompute from the full ledger on every load.
  */
-export default function FinancialProfile() {
+export default function FinancialProfile({
+  fetchProfile = getFinancialProfile,
+}: {
+  fetchProfile?: () => Promise<FinancialProfileType>;
+} = {}) {
   const [profile, setProfile] = useState<FinancialProfileType | null>(null);
 
   useEffect(() => {
     // Best-effort: the profile module is progressive enhancement, never blocks the page.
-    getFinancialProfile()
+    fetchProfile()
       .then((p) => {
         setProfile(p);
         if (p.estimated) track("profile_estimated_viewed");
       })
       .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (!profile) return null;

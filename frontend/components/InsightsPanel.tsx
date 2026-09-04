@@ -7,16 +7,24 @@ export default function InsightsPanel({
   jobId,
   insights,
   layout = "grid",
+  onAskMore,
 }: {
   jobId?: string;
   insights: DashboardInsight[];
   layout?: "grid" | "scroll";
+  // Overrides navigation to the authenticated /chat route — used by the
+  // unauthenticated sandbox, which has no /chat page to navigate to.
+  onAskMore?: (insight: DashboardInsight) => void;
 }) {
   const router = useRouter();
 
   if (insights.length === 0) return null;
 
   const askMore = (insight: DashboardInsight) => {
+    if (onAskMore) {
+      onAskMore(insight);
+      return;
+    }
     const params = new URLSearchParams({ q: insight.question });
     if (jobId) params.set("job", jobId);
     router.push(`/chat?${params.toString()}`);

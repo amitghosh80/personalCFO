@@ -52,7 +52,21 @@ function prefersReducedMotion(): boolean {
     window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 }
 
-export default function ScanAnimation({ jobId }: { jobId: string }) {
+export default function ScanAnimation({
+  jobId,
+  fetchTransactions,
+  onComplete,
+  showUploadSummary = true,
+  showStepNav = true,
+}: {
+  jobId?: string;
+  // Overrides the data source and completion behavior — used by the sandbox
+  // demo, which has no real jobId/import to advance into Income Review.
+  fetchTransactions?: () => Promise<Transaction[]>;
+  onComplete?: () => void;
+  showUploadSummary?: boolean;
+  showStepNav?: boolean;
+}) {
   const router = useRouter();
   const [txns, setTxns] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,25 +78,31 @@ export default function ScanAnimation({ jobId }: { jobId: string }) {
   const goToReview = () => {
     if (advanced.current) return;
     advanced.current = true;
-    router.push(`/import/${jobId}/income`);
+    if (onComplete) {
+      onComplete();
+    } else if (jobId) {
+      router.push(`/import/${jobId}/income`);
+    }
   };
 
   const uploadResult: UploadResult | null = useMemo(() => {
-    if (typeof window === "undefined") return null;
+    if (!showUploadSummary || !jobId || typeof window === "undefined") return null;
     try {
       const raw = sessionStorage.getItem(`upload:${jobId}`);
       return raw ? (JSON.parse(raw) as UploadResult) : null;
     } catch {
       return null;
     }
-  }, [jobId]);
+  }, [jobId, showUploadSummary]);
 
   useEffect(() => {
     setReduced(prefersReducedMotion());
-    getTransactions(jobId)
+    const load = fetchTransactions ?? (() => getTransactions(jobId!));
+    load()
       .then(setTxns)
       .catch(() => setTxns([]))
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
   // Stepwise scan; bounded by ANIMATE_CAP, then fast-forwards to the end.
@@ -175,17 +195,19 @@ export default function ScanAnimation({ jobId }: { jobId: string }) {
             onClick={goToReview}
             className="mt-4 w-full py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors"
           >
-            Continue to income review
+            {onComplete ? "See the Financial Profile" : "Continue to income review"}
           </button>
         </div>
       )}
 
-      <StepNav
-        backHref="/app"
-        backLabel="Upload"
-        onNext={goToReview}
-        nextLabel="Income review"
-      />
+      {showStepNav && (
+        <StepNav
+          backHref="/app"
+          backLabel="Upload"
+          onNext={goToReview}
+          nextLabel="Income review"
+        />
+      )}
     </div>
   );
 }

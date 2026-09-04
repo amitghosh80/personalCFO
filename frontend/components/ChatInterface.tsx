@@ -109,9 +109,13 @@ function SendIcon() {
 export default function ChatInterface({
   jobId,
   initialMessage,
+  sendMessage = sendChatMessage,
+  fetchStarters = getStarterQuestions,
 }: {
   jobId?: string;
   initialMessage?: string;
+  sendMessage?: typeof sendChatMessage;
+  fetchStarters?: () => Promise<string[]>;
 }) {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
@@ -123,11 +127,12 @@ export default function ChatInterface({
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    getStarterQuestions().then(setStarters).catch(() => {});
+    fetchStarters().then(setStarters).catch(() => {});
     if (jobId) {
       // PRD F4: 2–3 proactive observations appear automatically after an import.
       getObservations(jobId).then(setObservations).catch(() => {});
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
   useEffect(() => {
@@ -144,7 +149,7 @@ export default function ChatInterface({
     setMessages((prev) => [...prev, { role: "user", content: q }]);
     setLoading(true);
     try {
-      const res = await sendChatMessage(q, history);
+      const res = await sendMessage(q, history);
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: res.answer, tools: res.tools_used, followups: res.followups },
