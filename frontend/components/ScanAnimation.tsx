@@ -58,6 +58,7 @@ export default function ScanAnimation({
   onComplete,
   showUploadSummary = true,
   showStepNav = true,
+  autoAdvance = true,
 }: {
   jobId?: string;
   // Overrides the data source and completion behavior — used by the sandbox
@@ -66,6 +67,7 @@ export default function ScanAnimation({
   onComplete?: () => void;
   showUploadSummary?: boolean;
   showStepNav?: boolean;
+  autoAdvance?: boolean;
 }) {
   const router = useRouter();
   const [txns, setTxns] = useState<Transaction[]>([]);
@@ -121,11 +123,11 @@ export default function ScanAnimation({
 
   // Auto-advance into Income Review shortly after completion.
   useEffect(() => {
-    if (!done) return;
+    if (!done || !autoAdvance) return;
     const t = setTimeout(goToReview, 1400);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [done]);
+  }, [done, autoAdvance]);
 
   const counts = useMemo(() => {
     const upto = reduced ? txns.length : pos + 1;

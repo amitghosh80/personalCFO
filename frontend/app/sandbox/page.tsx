@@ -21,8 +21,11 @@ type Stage = "scanning" | "ready";
 function Banner() {
   return (
     <div className="bg-blue-600 text-white">
-      <div className="max-w-5xl mx-auto px-6 py-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm">
+      <div className="max-w-5xl mx-auto px-6 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Link href="/" className="text-sm font-bold tracking-tight shrink-0">
+          personal<span className="text-blue-200">CFO</span>
+        </Link>
+        <p className="text-sm flex-1 min-w-0">
           You&apos;re viewing <span className="font-semibold">Jordan</span> — a fictional example account with
           sample data.
         </p>
@@ -58,6 +61,7 @@ export default function SandboxPage() {
             onComplete={() => setStage("ready")}
             showUploadSummary={false}
             showStepNav={false}
+            autoAdvance={false}
           />
         </div>
       </div>
