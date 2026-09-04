@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import AppNav from "@/components/AppNav";
 import ChatInterface from "@/components/ChatInterface";
 import FinancialProfile from "@/components/FinancialProfile";
 import InsightsPanel from "@/components/InsightsPanel";
 import ScanAnimation from "@/components/ScanAnimation";
 import SectionCard from "@/components/SectionCard";
+import { clearToken, isAuthenticated } from "@/lib/auth";
 import {
   getSandboxFinancialProfile,
   getSandboxInsights,
@@ -18,7 +21,9 @@ import type { DashboardInsight } from "@/lib/types";
 
 type Stage = "scanning" | "ready";
 
-function Banner() {
+// Signed-out visitor (shared link, or previously the landing page hero):
+// no account to return to, so pitch signup instead.
+function GuestBanner() {
   return (
     <div className="bg-blue-600 text-white">
       <div className="max-w-5xl mx-auto px-6 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -40,20 +45,58 @@ function Banner() {
   );
 }
 
+// Logged-in visitor (reached via the /app first-run choice screen's "See a
+// live example" option): show the real app nav so they can get back to
+// their own account, plus a slim notice so the sample data isn't mistaken
+// for their own.
+function DemoNotice() {
+  return (
+    <div className="bg-blue-50 border-b border-blue-100">
+      <div className="max-w-5xl mx-auto px-6 py-2 text-sm text-blue-800">
+        You&apos;re viewing <span className="font-semibold">Jordan</span> — a fictional example account with
+        sample data.{" "}
+        <Link href="/app" className="font-medium underline hover:no-underline">
+          Back to your data
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 export default function SandboxPage() {
+  const router = useRouter();
+  const [authed, setAuthed] = useState(false);
   const [stage, setStage] = useState<Stage>("scanning");
   const [insights, setInsights] = useState<DashboardInsight[]>([]);
   const [chatQuestion, setChatQuestion] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    setAuthed(isAuthenticated());
+  }, []);
 
   useEffect(() => {
     if (stage !== "ready") return;
     getSandboxInsights().then(setInsights).catch(() => {});
   }, [stage]);
 
+  function handleLogout() {
+    clearToken();
+    router.push("/login");
+  }
+
+  const banner = authed ? (
+    <>
+      <AppNav onLogout={handleLogout} />
+      <DemoNotice />
+    </>
+  ) : (
+    <GuestBanner />
+  );
+
   if (stage === "scanning") {
     return (
       <div className="min-h-screen bg-gray-50">
-        <Banner />
+        {banner}
         <div className="max-w-3xl mx-auto px-6 py-10">
           <p className="mb-4 text-sm text-gray-500">
             This is what importing looks like — here it&apos;s replaying Jordan&apos;s five months of sample
@@ -73,7 +116,7 @@ export default function SandboxPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Banner />
+      {banner}
 
       <div className="max-w-5xl mx-auto px-6 py-10 space-y-8">
         <div>
