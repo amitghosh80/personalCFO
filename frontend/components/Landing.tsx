@@ -162,12 +162,6 @@ export default function Landing() {
               >
                 See how it works
               </a>
-              <Link
-                href="/sandbox"
-                className="px-6 py-3 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
-              >
-                See a live example
-              </Link>
             </div>
             <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2">
               <svg

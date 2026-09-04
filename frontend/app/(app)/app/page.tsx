@@ -69,6 +69,11 @@ export default function ImportPage() {
     router.push("/profile/vitals");
   }
 
+  function chooseSandbox() {
+    track("vitals_path_selected", { path: "sandbox" });
+    router.push("/sandbox");
+  }
+
   if (screen === "loading") return null;
 
   if (screen === "uploader") {
@@ -94,7 +99,7 @@ export default function ImportPage() {
           Import a statement for real numbers, or answer four quick questions to get an estimate now.
         </p>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 max-w-2xl mx-auto">
+      <div className="grid gap-4 sm:grid-cols-3 max-w-3xl mx-auto">
         <button
           type="button"
           onClick={chooseImport}
@@ -111,6 +116,14 @@ export default function ImportPage() {
         >
           <p className="text-lg font-bold text-gray-900">Answer a few questions</p>
           <p className="mt-1 text-sm text-gray-500">Get a rough Financial Profile in about 2 minutes.</p>
+        </button>
+        <button
+          type="button"
+          onClick={chooseSandbox}
+          className="rounded-xl border border-gray-200 bg-white p-6 text-left shadow-sm hover:border-blue-300 hover:shadow-md transition"
+        >
+          <p className="text-lg font-bold text-gray-900">See a live example</p>
+          <p className="mt-1 text-sm text-gray-500">Explore a sample account with five months of real-feeling data.</p>
         </button>
       </div>
       <p className="mt-6 text-center text-xs text-gray-400 max-w-xl mx-auto">
