@@ -9,6 +9,7 @@ import FinancialProfile from "@/components/FinancialProfile";
 import InsightsPanel from "@/components/InsightsPanel";
 import ScanAnimation from "@/components/ScanAnimation";
 import SectionCard from "@/components/SectionCard";
+import Wordmark from "@/components/Wordmark";
 import { clearToken, isAuthenticated } from "@/lib/auth";
 import {
   getSandboxFinancialProfile,
@@ -27,8 +28,8 @@ function GuestBanner() {
   return (
     <div className="bg-blue-600 text-white">
       <div className="max-w-5xl mx-auto px-6 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-        <Link href="/" className="text-sm font-bold tracking-tight shrink-0 order-1">
-          personal<span className="text-blue-200">CFO</span>
+        <Link href="/" className="shrink-0 order-1">
+          <Wordmark className="h-7 rounded bg-white/90 px-1.5 py-0.5" />
         </Link>
         <Link
           href="/signup"

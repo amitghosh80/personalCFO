@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import DeleteImportsMenuItem from "@/components/DeleteImportsMenuItem";
 import FeedbackButton from "@/components/FeedbackButton";
+import Wordmark from "@/components/Wordmark";
 
 const NAV_LINKS = [
   { href: "/app", label: "Import" },
@@ -51,8 +52,8 @@ export default function AppNav({ onLogout }: { onLogout: () => void }) {
   return (
     <nav className="bg-white border-b border-gray-200">
       <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-        <a href="/" className="text-lg font-bold text-gray-900 tracking-tight">
-          personal<span className="text-blue-600">CFO</span>
+        <a href="/">
+          <Wordmark />
         </a>
         <div className="hidden md:flex items-center gap-5">
           {NAV_LINKS.map((link) => (

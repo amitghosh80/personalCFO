@@ -421,7 +421,7 @@ export default function Landing() {
       {/* 5.10 Footer */}
       <footer className="bg-white border-t border-gray-200">
         <div className="max-w-6xl mx-auto px-6 py-12 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-          <Wordmark className="text-base" />
+          <Wordmark />
           <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-500">
             <a href="#features" className="hover:text-gray-900 transition-colors">Features</a>
             <a href="#how-it-works" className="hover:text-gray-900 transition-colors">How it works</a>
