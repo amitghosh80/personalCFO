@@ -85,40 +85,22 @@ export default function SandboxPage() {
     router.push("/login");
   }
 
-  const banner = authed ? (
-    <>
-      <AppNav onLogout={handleLogout} />
-      <DemoNotice />
-    </>
-  ) : (
-    <GuestBanner />
-  );
-
-  if (stage === "scanning") {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        {banner}
-        <div className="max-w-3xl mx-auto px-6 py-10">
-          <p className="mb-4 text-sm text-gray-500">
-            This is what importing looks like — here it&apos;s replaying Jordan&apos;s five months of sample
-            statements.
-          </p>
-          <ScanAnimation
-            fetchTransactions={getSandboxTransactions}
-            onComplete={() => setStage("ready")}
-            showUploadSummary={false}
-            showStepNav={false}
-            autoAdvance={false}
-          />
-        </div>
+  const mainContent =
+    stage === "scanning" ? (
+      <div className="max-w-3xl mx-auto px-6 py-10">
+        <p className="mb-4 text-sm text-gray-500">
+          This is what importing looks like — here it&apos;s replaying Jordan&apos;s five months of sample
+          statements.
+        </p>
+        <ScanAnimation
+          fetchTransactions={getSandboxTransactions}
+          onComplete={() => setStage("ready")}
+          showUploadSummary={false}
+          showStepNav={false}
+          autoAdvance={false}
+        />
       </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {banner}
-
+    ) : (
       <div className="max-w-5xl mx-auto px-6 py-10 space-y-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Jordan&apos;s Financial Profile</h1>
@@ -143,6 +125,24 @@ export default function SandboxPage() {
             initialMessage={chatQuestion}
           />
         </SectionCard>
+      </div>
+    );
+
+  if (!authed) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <GuestBanner />
+        {mainContent}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-screen flex-col bg-gray-50 md:flex-row">
+      <AppNav onLogout={handleLogout} />
+      <div className="flex flex-1 min-w-0 flex-col">
+        <DemoNotice />
+        {mainContent}
       </div>
     </div>
   );
