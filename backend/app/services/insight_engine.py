@@ -17,11 +17,9 @@ from ..services.analytics import (
     income_summary,
     spending_by_category,
     compare_periods,
-    recurring_charges,
     is_transfer as _is_transfer,
     is_spending_txn,
 )
-from ..services.profile_engine import _fee_subtype
 
 _load_txns = load_ledger
 
@@ -1054,27 +1052,6 @@ def _dash_top_category(session: Session, user_id: int, month: str, prior_month: 
     }
 
 
-def _dash_recurring(session: Session, user_id: int) -> Optional[dict]:
-    items = recurring_charges(session, user_id)["recurring"]
-    if not items:
-        return None
-    total = sum(r["typical_amount"] for r in items)
-    names = ", ".join(f"{r['merchant'].title()} (${r['typical_amount']:,.0f})" for r in items[:5])
-    more = "…" if len(items) > 5 else ""
-
-    title = f"${total:,.0f}/month in recurring charges across {len(items)} subscription{'s' if len(items) != 1 else ''}"
-    text = f"Recurring charges detected: {names}{more}. Total: ${total:,.2f}/month (${total * 12:,.2f}/year)."
-    severity = "high" if total >= 200 else "medium" if total >= 75 else "low"
-
-    return {
-        "type": "recurring_total",
-        "title": title,
-        "text": text,
-        "question": "What are all my recurring charges and subscriptions?",
-        "severity": severity,
-    }
-
-
 def _dash_unusual_large_txn(ledger: list[dict], month: str) -> Optional[dict]:
     debits_by_cat: dict[str, list[dict]] = defaultdict(list)
     for t in ledger:
@@ -1209,29 +1186,6 @@ def _dash_avg_transaction(ledger: list[dict], month: str) -> Optional[dict]:
     }
 
 
-def _dash_fees_ytd(ledger: list[dict], today: date) -> Optional[dict]:
-    """Fees and interest paid so far this year — an all-time/YTD fact, not a
-    month-over-month comparison, so it's unaffected by the current month
-    being partial."""
-    year_start = date(today.year, 1, 1)
-    matched = [
-        t for t in ledger
-        if t["type"] == TransactionType.debit and t["date"] >= year_start and _fee_subtype(t["description"])
-    ]
-    if not matched:
-        return None
-    total = sum(t["amount"] for t in matched)
-
-    return {
-        "type": "fees_and_interest_ytd",
-        "title": f"${total:,.2f} in fees and interest paid this year",
-        "text": (f"You've paid ${total:,.2f} in bank fees, card fees, or interest so far in {today.year} "
-                 f"across {len(matched)} charge{'s' if len(matched) != 1 else ''}."),
-        "question": "What fees and interest have I paid this year, and can I avoid them?",
-        "severity": "high" if total >= 100 else "medium" if total >= 25 else "low",
-    }
-
-
 def dashboard_insights(session: Session, user_id: int, job_id: str, limit: int = 3) -> list[dict]:
     """Top proactive insights for the per-import summary page. Computed fresh on
     each call (no persistence) — see AMI-48."""
@@ -1265,22 +1219,26 @@ def _insights_for_month(session: Session, user_id: int, ledger: list[dict], mont
     idx = all_months.index(month) if month in all_months else -1
     prior_month = all_months[idx - 1] if idx > 0 else None
 
-    # The current calendar month is still partial — comparing it against a
-    # fully-elapsed prior month (fewer days of spending so far) always looks
-    # like a huge swing that isn't real. Drop the cross-month comparison for
-    # that case; a same-month metric like savings rate is unaffected.
-    is_partial_month = month == date.today().strftime("%Y-%m")
+    # A month with fewer days of data than it actually has (the current
+    # calendar month still in progress, or the last imported statement ending
+    # mid-month) always looks like a huge swing against a fully-elapsed prior
+    # month that isn't real. Drop the cross-month comparison for that case; a
+    # same-month metric like savings rate is unaffected.
+    month_dates = [t["date"] for t in ledger if t["month"] == month]
+    latest_in_month = max(month_dates) if month_dates else None
+    is_partial_month = (
+        month == date.today().strftime("%Y-%m")
+        or (latest_in_month is not None and latest_in_month.day != monthrange(latest_in_month.year, latest_in_month.month)[1])
+    )
     comparison_prior_month = None if is_partial_month else prior_month
 
     candidates = [c for c in (
         _dash_top_category(session, user_id, month, comparison_prior_month),
-        _dash_recurring(session, user_id),
         _dash_unusual_large_txn(ledger, month),
         _dash_mom_change(session, user_id, month, comparison_prior_month),
         _dash_savings_rate(session, user_id, month),
         _dash_second_category(session, user_id, month),
         _dash_avg_transaction(ledger, month),
-        _dash_fees_ytd(ledger, date.today()),
     ) if c]
 
     candidates.sort(key=lambda c: _DASH_SEVERITY_RANK[c["severity"]])

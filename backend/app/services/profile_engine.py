@@ -174,9 +174,21 @@ def _txn_summaries(items: list[dict]) -> list[dict]:
 
 
 def _complete_months(ledger: list[dict], today: date) -> list[str]:
-    """Months strictly before the current (partial) month that have ledger data."""
+    """Months strictly before the current (partial) month that have ledger data,
+    excluding the earliest and latest ledger months too if they're partial (the
+    first imported statement started mid-month, or the last one ends mid-month
+    rather than running through month-end)."""
     current_month = today.strftime("%Y-%m")
-    return sorted({t["month"] for t in ledger if t["month"] < current_month})
+    months = {t["month"] for t in ledger if t["month"] < current_month}
+    if ledger:
+        dates = [t["date"] for t in ledger]
+        earliest, latest = min(dates), max(dates)
+        if earliest.day != 1:
+            months.discard(earliest.strftime("%Y-%m"))
+        days_in_latest_month = calendar.monthrange(latest.year, latest.month)[1]
+        if latest.day != days_in_latest_month:
+            months.discard(latest.strftime("%Y-%m"))
+    return sorted(months)
 
 
 def _debit_totals_by_month(ledger: list[dict]) -> dict[str, float]:
