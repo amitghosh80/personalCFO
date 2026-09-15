@@ -10,7 +10,6 @@ import {
 } from "@/lib/api";
 import type { TaxonomyPrimary, UncategorizedAlert, UncategorizedRow } from "@/lib/types";
 import CategoryPicker from "./CategoryPicker";
-import StepNav from "@/components/StepNav";
 
 /**
  * Batch review queue for low-confidence / uncategorized transactions (PRD F3).
@@ -66,7 +65,6 @@ export default function UncategorizedQueue({ jobId }: { jobId?: string }) {
 
   return (
     <div>
-      <StepNav backHistory className="mb-5" />
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Review queue</h2>
         <p className="text-gray-400 text-sm mt-0.5">

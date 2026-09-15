@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { getTaxonomy, getTransactions, updateCategory } from "@/lib/api";
 import type { TaxonomyPrimary, Transaction } from "@/lib/types";
 import CategoryPicker from "./CategoryPicker";
-import StepNav from "@/components/StepNav";
 
 const INCOME_LABELS: Record<string, string> = {
   salary: "Salary",
@@ -184,7 +183,6 @@ export default function TransactionTable({
 
   return (
     <div>
-      <StepNav backHistory className="mb-5" />
       <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Transactions</h2>
