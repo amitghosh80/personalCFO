@@ -14,20 +14,11 @@ function ImportIcon() {
   );
 }
 
-function ViewImportIcon() {
+function OverviewIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="h-5 w-5 shrink-0">
       <path strokeLinecap="round" strokeLinejoin="round" d="M7 3h7l3 3v15H7V3Z" />
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h6M9 13h6M9 17h4" />
-    </svg>
-  );
-}
-
-function ProfileIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="h-5 w-5 shrink-0">
-      <circle cx="12" cy="8" r="3" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6" />
     </svg>
   );
 }
@@ -59,8 +50,7 @@ function AskCfoIcon() {
 
 const NAV_LINKS = [
   { href: "/app", label: "Import", Icon: ImportIcon },
-  { href: "/summary", label: "View import", Icon: ViewImportIcon },
-  { href: "/profile", label: "Profile", Icon: ProfileIcon },
+  { href: "/summary", label: "Overview", Icon: OverviewIcon },
   { href: "/transactions", label: "Transactions", Icon: TransactionsIcon },
   { href: "/uncategorized", label: "Review Queue", Icon: ReviewQueueIcon },
   { href: "/chat", label: "Ask CFO", Icon: AskCfoIcon },

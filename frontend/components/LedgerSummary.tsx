@@ -10,7 +10,7 @@ import SectionCard from "@/components/SectionCard";
 import type { DashboardInsight, LedgerSummary as LedgerSummaryType } from "@/lib/types";
 
 /**
- * The "View import" dashboard: spending by category, month by month, across
+ * The "Overview" dashboard: spending by category, month by month, across
  * every import. Reads /api/summary (whole-ledger), which shares its math with
  * the chat tools so the numbers match askCFO.
  */
