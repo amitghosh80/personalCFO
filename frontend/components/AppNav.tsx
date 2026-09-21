@@ -48,13 +48,19 @@ function AskCfoIcon() {
   );
 }
 
-const NAV_LINKS = [
-  { href: "/app", label: "Import", Icon: ImportIcon },
-  { href: "/summary", label: "Overview", Icon: OverviewIcon },
+const IMPORT_LINK = { href: "/app", label: "Import", Icon: ImportIcon };
+const OVERVIEW_LINK = { href: "/summary", label: "Overview", Icon: OverviewIcon };
+
+const REST_LINKS = [
   { href: "/transactions", label: "Transactions", Icon: TransactionsIcon },
   { href: "/uncategorized", label: "Review Queue", Icon: ReviewQueueIcon },
   { href: "/chat", label: "Ask CFO", Icon: AskCfoIcon },
 ];
+
+// New users see Import first; once real statements have been imported,
+// Overview leads since that's the page they actually want on return visits.
+const NAV_LINKS_NEW = [IMPORT_LINK, OVERVIEW_LINK, ...REST_LINKS];
+const NAV_LINKS_RETURNING = [OVERVIEW_LINK, IMPORT_LINK, ...REST_LINKS];
 
 const MOBILE_ITEM_CLASS =
   "flex items-center gap-3 w-full px-4 py-3 text-left text-base text-blue-600 hover:bg-gray-50 rounded-lg transition-colors";
@@ -86,9 +92,16 @@ function CloseIcon() {
  * choice-screen option), and a logged-in visitor needs a way back to their
  * own /app instead of just the demo's own banner.
  */
-export default function AppNav({ onLogout }: { onLogout: () => void }) {
+export default function AppNav({
+  onLogout,
+  hasImportedData = false,
+}: {
+  onLogout: () => void;
+  hasImportedData?: boolean;
+}) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const navLinks = hasImportedData ? NAV_LINKS_RETURNING : NAV_LINKS_NEW;
 
   useEffect(() => {
     setMobileOpen(false);
@@ -120,7 +133,7 @@ export default function AppNav({ onLogout }: { onLogout: () => void }) {
 
         {mobileOpen && (
           <div className="border-t border-gray-200 px-2 py-2 flex flex-col">
-            {NAV_LINKS.map(({ href, label, Icon }) => (
+            {navLinks.map(({ href, label, Icon }) => (
               <a key={href} href={href} className={MOBILE_ITEM_CLASS}>
                 <Icon />
                 {label}
@@ -140,7 +153,7 @@ export default function AppNav({ onLogout }: { onLogout: () => void }) {
           <Wordmark />
         </a>
         <nav className="flex-1 flex flex-col gap-1 px-3">
-          {NAV_LINKS.map(({ href, label, Icon }) => (
+          {navLinks.map(({ href, label, Icon }) => (
             <a key={href} href={href} className={sidebarLinkClass(href)}>
               <Icon />
               {label}

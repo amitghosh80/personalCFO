@@ -275,6 +275,20 @@ export async function getFinancialProfile(): Promise<FinancialProfile> {
   return handleResponse<FinancialProfile>(res);
 }
 
+/**
+ * Where to land right after login. Returning users with real imported data
+ * go straight to Overview; everyone else sees the Import/first-run choice
+ * screen at /app.
+ */
+export async function getPostAuthRedirect(): Promise<string> {
+  try {
+    const profile = await getFinancialProfile();
+    return profile.source === "ledger" ? "/summary" : "/app";
+  } catch {
+    return "/app";
+  }
+}
+
 // ─── Financial Vitals Interview (AMI-66) ───────────────────────────────────────
 
 export async function getFinancialVitals(): Promise<FinancialVitals | null> {

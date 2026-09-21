@@ -3,7 +3,7 @@
 import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import Script from "next/script";
 import { useRouter } from "next/navigation";
-import { signInWithGoogle } from "@/lib/api";
+import { getPostAuthRedirect, signInWithGoogle } from "@/lib/api";
 import { setToken } from "@/lib/auth";
 
 declare global {
@@ -42,7 +42,7 @@ export default function GoogleSignInButton({
       try {
         const res = await signInWithGoogle(response.credential);
         setToken(res.access_token);
-        router.push("/app");
+        router.push(await getPostAuthRedirect());
       } catch (err) {
         setError(err instanceof Error ? err.message : "Google sign-in failed");
       }

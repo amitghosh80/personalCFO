@@ -5,16 +5,22 @@ import { useRouter } from "next/navigation";
 import IncomeBanner from "@/components/IncomeBanner";
 import AppNav from "@/components/AppNav";
 import { isAuthenticated, clearToken } from "@/lib/auth";
+import { getFinancialProfile } from "@/lib/api";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [checked, setChecked] = useState(false);
+  const [hasImportedData, setHasImportedData] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated()) {
       router.replace("/login");
     } else {
       setChecked(true);
+      // Best-effort: nav ordering is progressive enhancement, never blocks the page.
+      getFinancialProfile()
+        .then((p) => setHasImportedData(p.source === "ledger"))
+        .catch(() => {});
     }
   }, [router]);
 
@@ -27,7 +33,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
-      <AppNav onLogout={handleLogout} />
+      <AppNav onLogout={handleLogout} hasImportedData={hasImportedData} />
       <div className="flex flex-1 min-w-0 flex-col">
         <IncomeBanner />
         <main className="flex-1 w-full max-w-7xl mx-auto px-6 md:px-10 py-10">{children}</main>

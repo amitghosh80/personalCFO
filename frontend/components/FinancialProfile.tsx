@@ -591,9 +591,17 @@ function DrillDown({ metricKey, payload }: { metricKey: MetricKey; payload: any 
   }
 }
 
-function Tile({ metricKey, metric }: { metricKey: MetricKey; metric: ProfileMetric<any> }) {
-  const [expanded, setExpanded] = useState(false);
-
+function Tile({
+  metricKey,
+  metric,
+  expanded,
+  onToggle,
+}: {
+  metricKey: MetricKey;
+  metric: ProfileMetric<any>;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   if (metric.status === "insufficient_data") {
     return (
       <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex flex-col">
@@ -618,7 +626,7 @@ function Tile({ metricKey, metric }: { metricKey: MetricKey; metric: ProfileMetr
           {metricKey !== "fees_and_interest" && (
             <button
               type="button"
-              onClick={() => setExpanded((prev) => !prev)}
+              onClick={onToggle}
               className="mt-3 text-xs font-medium text-blue-600 hover:text-blue-700 text-left"
             >
               {expanded ? "Hide how this was estimated" : "How this was estimated"} {expanded ? "▲" : "▼"}
@@ -649,7 +657,7 @@ function Tile({ metricKey, metric }: { metricKey: MetricKey; metric: ProfileMetr
         <p className="text-xs text-gray-500 flex-1 mt-1">{metric.narrative}</p>
         <button
           type="button"
-          onClick={() => setExpanded((prev) => !prev)}
+          onClick={onToggle}
           className="mt-3 text-xs font-medium text-blue-600 hover:text-blue-700 text-left"
         >
           {expanded ? "Hide details" : "Show details"} {expanded ? "▲" : "▼"}
@@ -679,6 +687,7 @@ export default function FinancialProfile({
   fetchProfile?: () => Promise<FinancialProfileType>;
 } = {}) {
   const [profile, setProfile] = useState<FinancialProfileType | null>(null);
+  const [expandedKey, setExpandedKey] = useState<MetricKey | null>(null);
 
   useEffect(() => {
     // Best-effort: the profile module is progressive enhancement, never blocks the page.
@@ -727,7 +736,13 @@ export default function FinancialProfile({
       )}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 grid-flow-row-dense">
         {METRIC_ORDER.map((key) => (
-          <Tile key={key} metricKey={key} metric={profile.metrics[key]} />
+          <Tile
+            key={key}
+            metricKey={key}
+            metric={profile.metrics[key]}
+            expanded={expandedKey === key}
+            onToggle={() => setExpandedKey((prev) => (prev === key ? null : key))}
+          />
         ))}
       </div>
       <p className="mt-3 text-[11px] text-gray-400">

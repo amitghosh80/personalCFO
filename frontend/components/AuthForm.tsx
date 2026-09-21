@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { login, signup } from "@/lib/api";
+import { getPostAuthRedirect, login, signup } from "@/lib/api";
 import { setToken } from "@/lib/auth";
 import GoogleSignInButton from "@/components/GoogleSignInButton";
 
@@ -22,7 +22,7 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
     try {
       const res = isSignup ? await signup(email, password) : await login(email, password);
       setToken(res.access_token);
-      router.push("/app");
+      router.push(await getPostAuthRedirect());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
