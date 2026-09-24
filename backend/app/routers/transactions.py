@@ -155,10 +155,12 @@ def get_import_summary(
     current_user: User = Depends(get_current_user),
 ):
     from collections import defaultdict
+    from ..services.analytics import load_ledger, month_completeness
     from ..services.expense_categorizer import CATEGORY_DISPLAY, is_spending
     from ..services.income_classifier import INCOME_DISPLAY
 
     job = _require_job(session, current_user.id, job_id)
+    completeness = month_completeness(load_ledger(session, current_user.id))
     txns = session.exec(
         select(Transaction)
         .where(Transaction.user_id == current_user.id)
@@ -231,6 +233,7 @@ def get_import_summary(
             "net": round(data["income"] - data["expenses"], 2),
             "top_categories": _top_categories(month),
             "income_transactions": _income_transactions(month),
+            "is_partial": not completeness.get(month, False),
         }
         for month, data in sorted(buckets.items())
     ]

@@ -28,6 +28,9 @@ def test_committed_monthly_spend_detects_stable_monthly_charges(make_txn):
                  description="NETFLIX.COM", expense_category="subscriptions")
         make_txn(day=f"2026-{m}-01", amount=1500.00, txn_type=TransactionType.debit,
                  description="RENT PAYMENT", expense_category="housing")
+    # July's statement reaches month-end so July counts as a complete month.
+    make_txn(day="2026-07-31", amount=1.00, txn_type=TransactionType.debit,
+             description="ONE OFF PURCHASE", expense_category="shopping")
 
     metrics = _profile(make_txn.__self_session__)["metrics"]
     m1 = metrics["committed_monthly_spend"]
@@ -47,6 +50,11 @@ def test_committed_monthly_spend_splits_merged_price_tiers(make_txn):
                  description="APPLE.COM/BILL INTERNET CHARGE", expense_category="subscriptions")
         make_txn(day=f"2026-{m}-22", amount=10.92, txn_type=TransactionType.debit,
                  description="APPLE.COM/BILL INTERNET CHARGE", expense_category="subscriptions")
+    # Pad both calendar edges so May and June each count as complete months.
+    make_txn(day="2026-05-01", amount=3.50, txn_type=TransactionType.debit,
+             description="COFFEE SHOP A", expense_category="food_and_drink")
+    make_txn(day="2026-06-30", amount=4.75, txn_type=TransactionType.debit,
+             description="COFFEE SHOP B", expense_category="food_and_drink")
 
     metrics = _profile(make_txn.__self_session__, today=date(2026, 7, 1))["metrics"]
     payload = metrics["committed_monthly_spend"]["payload"]
@@ -64,6 +72,11 @@ def test_committed_monthly_spend_survives_a_stale_ledger(make_txn):
              description="ROCKET MORTGAGE LOAN", expense_category="housing")
     make_txn(day="2026-05-04", amount=1540.24, txn_type=TransactionType.debit,
              description="ROCKET MORTGAGE LOAN", expense_category="housing")
+    # Pad both calendar edges so April and May each count as complete months.
+    make_txn(day="2026-04-01", amount=2.00, txn_type=TransactionType.debit,
+             description="FILLER A", expense_category="shopping")
+    make_txn(day="2026-05-31", amount=2.50, txn_type=TransactionType.debit,
+             description="FILLER B", expense_category="shopping")
 
     metrics = _profile(make_txn.__self_session__, today=date(2026, 8, 23))["metrics"]
     payload = metrics["committed_monthly_spend"]["payload"]
@@ -95,6 +108,9 @@ def test_committed_monthly_spend_rejects_coincidental_same_amount_repeats(make_t
              description="STARBUCKS STORE #123", expense_category="dining")
     make_txn(day="2026-06-05", amount=5.25, txn_type=TransactionType.debit,
              description="STARBUCKS STORE #123", expense_category="dining")
+    # Pad June's calendar edge so it counts as a complete month.
+    make_txn(day="2026-06-30", amount=9.99, txn_type=TransactionType.debit,
+             description="FILLER SHOP", expense_category="shopping")
 
     metrics = _profile(make_txn.__self_session__, today=date(2026, 7, 1))["metrics"]
     payload = metrics["committed_monthly_spend"]["payload"]
@@ -110,6 +126,11 @@ def test_committed_monthly_spend_excludes_non_bill_categories(make_txn):
              description="WHOLE FOODS MARKET", expense_category="food_and_drink")
     make_txn(day="2026-06-06", amount=62.40, txn_type=TransactionType.debit,
              description="WHOLE FOODS MARKET", expense_category="food_and_drink")
+    # Pad both calendar edges so May and June each count as complete months.
+    make_txn(day="2026-05-01", amount=3.00, txn_type=TransactionType.debit,
+             description="FILLER A", expense_category="shopping")
+    make_txn(day="2026-06-30", amount=3.50, txn_type=TransactionType.debit,
+             description="FILLER B", expense_category="shopping")
 
     metrics = _profile(make_txn.__self_session__, today=date(2026, 7, 1))["metrics"]
     payload = metrics["committed_monthly_spend"]["payload"]
@@ -124,11 +145,31 @@ def test_committed_monthly_spend_accepts_month_end_anchored_billing(make_txn):
              description="APPLE.COM/BILL", expense_category="subscriptions")
     make_txn(day="2026-02-28", amount=9.99, txn_type=TransactionType.debit,
              description="APPLE.COM/BILL", expense_category="subscriptions")
+    # Pad January's start so it counts as a complete month too.
+    make_txn(day="2026-01-01", amount=2.00, txn_type=TransactionType.debit,
+             description="FILLER", expense_category="shopping")
 
     metrics = _profile(make_txn.__self_session__, today=date(2026, 3, 1))["metrics"]
     payload = metrics["committed_monthly_spend"]["payload"]
     assert payload["commitment_count"] == 1
     assert payload["commitments"][0]["merchant"] == "Apple.Com/Bill"
+
+
+def test_committed_monthly_spend_insufficient_when_one_of_two_months_is_partial(make_txn):
+    # May is a fully-covered statement upload; June's statement only covers
+    # the first half of the month with no follow-up file for the rest of
+    # June, so only 1 of the 2 calendar months is actually complete.
+    make_txn(day="2026-05-01", amount=1500.00, txn_type=TransactionType.debit,
+             description="RENT PAYMENT", expense_category="housing", source_file_hash="fileA")
+    make_txn(day="2026-05-31", amount=17.99, txn_type=TransactionType.debit,
+             description="NETFLIX.COM", expense_category="subscriptions", source_file_hash="fileA")
+    make_txn(day="2026-06-01", amount=1500.00, txn_type=TransactionType.debit,
+             description="RENT PAYMENT", expense_category="housing", source_file_hash="fileB")
+    make_txn(day="2026-06-15", amount=17.99, txn_type=TransactionType.debit,
+             description="NETFLIX.COM", expense_category="subscriptions", source_file_hash="fileB")
+
+    metrics = _profile(make_txn.__self_session__, today=date(2026, 8, 15))["metrics"]
+    assert metrics["committed_monthly_spend"]["status"] == "insufficient_data"
 
 
 def test_average_monthly_burn_3mo_and_month_to_date(make_txn):

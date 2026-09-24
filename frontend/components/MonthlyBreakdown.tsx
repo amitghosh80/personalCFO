@@ -164,55 +164,68 @@ export default function MonthlyBreakdown({
   }
 
   const total = totals(rows);
+  const hasPartialMonth = rows.some((r) => r.is_partial);
 
   return (
-    <div className="rounded-xl border border-gray-200 overflow-hidden">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="bg-gray-50 border-b border-gray-200 text-left">
-            <th className="px-5 py-3 font-medium text-gray-500">Month</th>
-            <th className="px-5 py-3 font-medium text-gray-500 text-right">Income</th>
-            <th className="px-5 py-3 font-medium text-gray-500 text-right">Expenses</th>
-            <th className="px-5 py-3 font-medium text-gray-500 text-right">Net Cash Flow</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100 bg-white">
-          {rows.map((r) => {
-            const isOpen = expanded.has(r.month);
-            return (
-              <Fragment key={r.month}>
-                <tr className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => toggle(r.month)}>
-                  <td className="px-5 py-3 text-gray-700 font-medium">
-                    <span className="inline-flex items-center gap-2">
-                      <span className={`text-gray-400 transition-transform ${isOpen ? "rotate-90" : ""}`}>▸</span>
-                      {formatMonth(r.month)}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-right tabular-nums text-green-700">{fmt(r.income)}</td>
-                  <td className="px-5 py-3 text-right tabular-nums text-red-600">{fmt(r.expenses)}</td>
-                  <td className="px-5 py-3 text-right"><NetCell value={r.net} /></td>
-                </tr>
-                {isOpen && (
-                  <tr className="bg-gray-50/60">
-                    <td colSpan={4} className="border-t border-gray-100 p-0">
-                      <IncomeTransactions row={r} />
-                      <CategoryBars row={r} />
+    <Fragment>
+      <div className="rounded-xl border border-gray-200 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200 text-left">
+              <th className="px-5 py-3 font-medium text-gray-500">Month</th>
+              <th className="px-5 py-3 font-medium text-gray-500 text-right">Income</th>
+              <th className="px-5 py-3 font-medium text-gray-500 text-right">Expenses</th>
+              <th className="px-5 py-3 font-medium text-gray-500 text-right">Net Cash Flow</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 bg-white">
+            {rows.map((r) => {
+              const isOpen = expanded.has(r.month);
+              return (
+                <Fragment key={r.month}>
+                  <tr className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => toggle(r.month)}>
+                    <td className="px-5 py-3 text-gray-700 font-medium">
+                      <span className="inline-flex items-center gap-2">
+                        <span className={`text-gray-400 transition-transform ${isOpen ? "rotate-90" : ""}`}>▸</span>
+                        {formatMonth(r.month)}
+                        {r.is_partial && (
+                          <sup className="text-gray-400" title="This month's data is based on a partial statement upload and may be incomplete.">
+                            *
+                          </sup>
+                        )}
+                      </span>
                     </td>
+                    <td className="px-5 py-3 text-right tabular-nums text-green-700">{fmt(r.income)}</td>
+                    <td className="px-5 py-3 text-right tabular-nums text-red-600">{fmt(r.expenses)}</td>
+                    <td className="px-5 py-3 text-right"><NetCell value={r.net} /></td>
                   </tr>
-                )}
-              </Fragment>
-            );
-          })}
-        </tbody>
-        <tfoot>
-          <tr className="bg-gray-50 border-t border-gray-200 font-semibold">
-            <td className="px-5 py-3 text-gray-700">Total</td>
-            <td className="px-5 py-3 text-right tabular-nums text-green-700">{fmt(total.income)}</td>
-            <td className="px-5 py-3 text-right tabular-nums text-red-600">{fmt(total.expenses)}</td>
-            <td className="px-5 py-3 text-right"><NetCell value={total.net} /></td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
+                  {isOpen && (
+                    <tr className="bg-gray-50/60">
+                      <td colSpan={4} className="border-t border-gray-100 p-0">
+                        <IncomeTransactions row={r} />
+                        <CategoryBars row={r} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr className="bg-gray-50 border-t border-gray-200 font-semibold">
+              <td className="px-5 py-3 text-gray-700">Total</td>
+              <td className="px-5 py-3 text-right tabular-nums text-green-700">{fmt(total.income)}</td>
+              <td className="px-5 py-3 text-right tabular-nums text-red-600">{fmt(total.expenses)}</td>
+              <td className="px-5 py-3 text-right"><NetCell value={total.net} /></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      {hasPartialMonth && (
+        <p className="text-xs text-gray-400 mt-3 px-1">
+          * This month&apos;s data is based on a partial statement upload and may be incomplete.
+        </p>
+      )}
+    </Fragment>
   );
 }

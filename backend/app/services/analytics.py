@@ -74,7 +74,48 @@ def load_ledger(session: Session, user_id: int) -> list[dict]:
             "income_category": t.income_category or "other",
             "expense_category": t.expense_category or "other",
             "expense_subcategory": t.expense_subcategory or "other",
+            "source_file_hash": t.source_file_hash,
         })
+    return result
+
+
+def month_completeness(ledger: list[dict]) -> dict[str, bool]:
+    """True for a month iff some uploaded file's transaction span reaches back
+    to that month's 1st AND some file's span reaches forward to that month's
+    last day (a file's own min/max transaction date stands in for its real
+    statement period, since periods aren't parsed from source documents). A
+    single file can satisfy both edges, or two adjacent files (e.g. two
+    non-calendar-aligned billing cycles that abut with no gap) can each cover
+    one edge.
+
+    This also naturally treats the current, still-in-progress calendar month
+    as partial: no file's max date can reach a future month-end.
+
+    Known false-positive class: a real statement with no activity right at
+    its calendar edge (e.g. no transactions until the 3rd) will be judged
+    partial even though the underlying statement was complete. This is a
+    deliberate conservative bias — better to under-claim completeness than
+    over-claim it.
+    """
+    spans: dict[str, tuple[date, date]] = {}
+    for t in ledger:
+        h = t["source_file_hash"]
+        d = t["date"]
+        lo, hi = spans.get(h, (d, d))
+        spans[h] = (min(lo, d), max(hi, d))
+
+    months_hashes: dict[str, set[str]] = defaultdict(set)
+    for t in ledger:
+        months_hashes[t["month"]].add(t["source_file_hash"])
+
+    result: dict[str, bool] = {}
+    for month, hashes in months_hashes.items():
+        year, mon = int(month[:4]), int(month[5:7])
+        month_start = date(year, mon, 1)
+        month_end = date(year, mon, monthrange(year, mon)[1])
+        covers_start = any(spans[h][0] <= month_start for h in hashes)
+        covers_end = any(spans[h][1] >= month_end for h in hashes)
+        result[month] = covers_start and covers_end
     return result
 
 
@@ -97,6 +138,7 @@ def monthly_summary(session: Session, user_id: int) -> dict:
     so the "View import" dashboard and the chatbot never disagree. Shape mirrors
     the per-job import summary's monthly_breakdown."""
     ledger = load_ledger(session, user_id)
+    completeness = month_completeness(ledger)
     buckets: dict[str, dict] = defaultdict(lambda: {"income": 0.0, "expenses": 0.0})
     cat_buckets: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
     income_txn_buckets: dict[str, list[dict]] = defaultdict(list)
@@ -146,6 +188,7 @@ def monthly_summary(session: Session, user_id: int) -> dict:
             "net": round(d["income"] - d["expenses"], 2),
             "top_categories": _top(m),
             "income_transactions": _income_transactions(m),
+            "is_partial": not completeness.get(m, False),
         }
         for m, d in sorted(buckets.items())
     ]

@@ -225,3 +225,81 @@ def test_dispatch_tool_routes_and_wraps_errors(make_txn):
 
     unknown = analytics.dispatch_tool(s, TEST_USER_ID, "no_such_tool", {}, today=TODAY)
     assert "error" in unknown
+
+
+def test_load_ledger_includes_source_file_hash(make_txn):
+    make_txn(day="2026-05-01", amount=10.0, txn_type=TransactionType.debit,
+             description="STARBUCKS", expense_category="food_and_drink", source_file_hash="fileA")
+    rows = analytics.load_ledger(_session_of(make_txn), TEST_USER_ID)
+    assert rows[0]["source_file_hash"] == "fileA"
+
+
+def test_month_completeness_single_file_spanning_full_month(make_txn):
+    make_txn(day="2026-05-01", amount=10.0, txn_type=TransactionType.debit,
+             description="A", expense_category="shopping", source_file_hash="fileA")
+    make_txn(day="2026-05-31", amount=10.0, txn_type=TransactionType.debit,
+             description="B", expense_category="shopping", source_file_hash="fileA")
+    ledger = analytics.load_ledger(_session_of(make_txn), TEST_USER_ID)
+    assert analytics.month_completeness(ledger) == {"2026-05": True}
+
+
+def test_month_completeness_file_ends_mid_month_with_no_followup(make_txn):
+    make_txn(day="2026-05-01", amount=10.0, txn_type=TransactionType.debit,
+             description="A", expense_category="shopping", source_file_hash="fileA")
+    make_txn(day="2026-05-20", amount=10.0, txn_type=TransactionType.debit,
+             description="B", expense_category="shopping", source_file_hash="fileA")
+    ledger = analytics.load_ledger(_session_of(make_txn), TEST_USER_ID)
+    assert analytics.month_completeness(ledger) == {"2026-05": False}
+
+
+def test_month_completeness_two_files_jointly_span_month(make_txn):
+    # Two non-calendar-aligned billing cycles that abut with no gap.
+    make_txn(day="2026-04-20", amount=10.0, txn_type=TransactionType.debit,
+             description="A", expense_category="shopping", source_file_hash="cycleA")
+    make_txn(day="2026-05-19", amount=10.0, txn_type=TransactionType.debit,
+             description="B", expense_category="shopping", source_file_hash="cycleA")
+    make_txn(day="2026-05-20", amount=10.0, txn_type=TransactionType.debit,
+             description="C", expense_category="shopping", source_file_hash="cycleB")
+    make_txn(day="2026-06-19", amount=10.0, txn_type=TransactionType.debit,
+             description="D", expense_category="shopping", source_file_hash="cycleB")
+    ledger = analytics.load_ledger(_session_of(make_txn), TEST_USER_ID)
+    completeness = analytics.month_completeness(ledger)
+    assert completeness["2026-05"] is True
+
+
+def test_month_completeness_mid_history_gap(make_txn):
+    # fileA covers Jan fully but stops Mar 20 (mid-month, no follow-up file
+    # covers the rest of March); fileB only resumes Jul 10 (mid-month, no
+    # earlier file covers the start of July). The gap months (Apr-Jun) never
+    # appear at all, and the two boundary months touching the gap are each
+    # partial since the file bordering them doesn't reach the calendar edge.
+    make_txn(day="2026-01-01", amount=10.0, txn_type=TransactionType.debit,
+             description="A", expense_category="shopping", source_file_hash="fileA")
+    make_txn(day="2026-01-31", amount=10.0, txn_type=TransactionType.debit,
+             description="B", expense_category="shopping", source_file_hash="fileA")
+    make_txn(day="2026-03-01", amount=10.0, txn_type=TransactionType.debit,
+             description="C", expense_category="shopping", source_file_hash="fileA")
+    make_txn(day="2026-03-20", amount=10.0, txn_type=TransactionType.debit,
+             description="D", expense_category="shopping", source_file_hash="fileA")
+    make_txn(day="2026-07-10", amount=10.0, txn_type=TransactionType.debit,
+             description="E", expense_category="shopping", source_file_hash="fileB")
+    make_txn(day="2026-07-31", amount=10.0, txn_type=TransactionType.debit,
+             description="F", expense_category="shopping", source_file_hash="fileB")
+    ledger = analytics.load_ledger(_session_of(make_txn), TEST_USER_ID)
+    completeness = analytics.month_completeness(ledger)
+    assert completeness["2026-01"] is True
+    assert completeness["2026-03"] is False
+    assert completeness["2026-07"] is False
+    assert "2026-04" not in completeness
+    assert "2026-05" not in completeness
+    assert "2026-06" not in completeness
+
+
+def test_monthly_summary_marks_partial_months(make_txn):
+    make_txn(day="2026-05-01", amount=10.0, txn_type=TransactionType.debit,
+             description="A", expense_category="shopping", source_file_hash="fileA")
+    make_txn(day="2026-05-20", amount=10.0, txn_type=TransactionType.debit,
+             description="B", expense_category="shopping", source_file_hash="fileA")
+    summary = analytics.monthly_summary(_session_of(make_txn), TEST_USER_ID)
+    row = next(r for r in summary["monthly_breakdown"] if r["month"] == "2026-05")
+    assert row["is_partial"] is True

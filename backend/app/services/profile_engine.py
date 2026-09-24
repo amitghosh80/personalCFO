@@ -16,7 +16,7 @@ from sqlmodel import Session, select
 
 from ..models.financial_vitals import FinancialVitals
 from ..models.transaction import TransactionType
-from .analytics import load_ledger, is_transfer, is_spending_txn, _norm as _normalize_merchant
+from .analytics import load_ledger, is_transfer, is_spending_txn, month_completeness, _norm as _normalize_merchant
 from .expense_categorizer import primary_display
 from .vitals_service import cents_to_dollars, total_spend_cents
 
@@ -173,22 +173,11 @@ def _txn_summaries(items: list[dict]) -> list[dict]:
     ]
 
 
-def _complete_months(ledger: list[dict], today: date) -> list[str]:
-    """Months strictly before the current (partial) month that have ledger data,
-    excluding the earliest and latest ledger months too if they're partial (the
-    first imported statement started mid-month, or the last one ends mid-month
-    rather than running through month-end)."""
-    current_month = today.strftime("%Y-%m")
-    months = {t["month"] for t in ledger if t["month"] < current_month}
-    if ledger:
-        dates = [t["date"] for t in ledger]
-        earliest, latest = min(dates), max(dates)
-        if earliest.day != 1:
-            months.discard(earliest.strftime("%Y-%m"))
-        days_in_latest_month = calendar.monthrange(latest.year, latest.month)[1]
-        if latest.day != days_in_latest_month:
-            months.discard(latest.strftime("%Y-%m"))
-    return sorted(months)
+def _complete_months(ledger: list[dict]) -> list[str]:
+    """Months with ledger data whose statement coverage reaches both the 1st
+    and the last day of the month — see analytics.month_completeness."""
+    completeness = month_completeness(ledger)
+    return sorted(m for m, complete in completeness.items() if complete)
 
 
 def _debit_totals_by_month(ledger: list[dict]) -> dict[str, float]:
@@ -340,15 +329,18 @@ def _cluster_amounts(items: list[dict], rel_tol: float = 0.10) -> list[list[dict
 # ─── Metric 1: Committed Monthly Spend ─────────────────────────────────────────
 
 def _committed_monthly_spend(ledger: list[dict], today: date) -> dict:
-    months = sorted({t["month"] for t in ledger})
-    if len(months) < 2:
+    complete = _complete_months(ledger)
+    if len(complete) < 2:
         return _insufficient("Import at least 2 complete months of statements to detect recurring commitments.")
 
-    commitments = detect_commitments(ledger, today)
+    complete_set = set(complete)
+    complete_ledger = [t for t in ledger if t["month"] in complete_set]
+
+    commitments = detect_commitments(complete_ledger, today)
     total = sum(c["monthly_equivalent"] for c in commitments)
     annualized = total * 12
 
-    conf = 0.30 if len(months) >= 3 else 0.0
+    conf = 0.30 if len(complete) >= 3 else 0.0
     conf += 0.30 if commitments and all(c["confidence_label"] == "high" for c in commitments) else 0.0
     conf += 0.20 if len(commitments) >= 3 else 0.0
     conf += 0.20 if not any(c["cadence_ambiguous"] for c in commitments) else 0.0
@@ -384,7 +376,7 @@ def _committed_monthly_spend(ledger: list[dict], today: date) -> dict:
 # ─── Metric 2: Average Monthly Burn ────────────────────────────────────────────
 
 def _average_monthly_burn(ledger: list[dict], today: date) -> dict:
-    complete = _complete_months(ledger, today)
+    complete = _complete_months(ledger)
     if len(complete) < 1:
         return _insufficient("Import at least 1 complete month of statements.")
 
@@ -460,7 +452,7 @@ def _average_monthly_burn(ledger: list[dict], today: date) -> dict:
 # ─── Shared income basis (metrics 3 and 5) ────────────────────────────────────
 
 def _income_basis(ledger: list[dict], today: date) -> dict:
-    complete = _complete_months(ledger, today)
+    complete = _complete_months(ledger)
     credits = [t for t in ledger if t["type"] == TransactionType.credit]
     confirmed = [t for t in credits if t["income_confirmed"] is True]
 
@@ -603,7 +595,7 @@ def _average_monthly_income(ledger: list[dict], today: date) -> dict:
 # ─── Metric 4: Fixed vs. Discretionary Baseline ────────────────────────────────
 
 def _fixed_vs_discretionary(ledger: list[dict], today: date) -> dict:
-    complete = _complete_months(ledger, today)
+    complete = _complete_months(ledger)
     if len(complete) < 2:
         return _insufficient("Import at least 2 complete months of statements.")
 
@@ -927,6 +919,7 @@ def get_financial_profile(session: Session, user_id: int, today: date | None = N
         return {
             "computed_at": computed_at,
             "ledger_months_available": months_available,
+            "complete_months": _complete_months(ledger),
             "source": "ledger",
             "estimated": False,
             "metrics": _ledger_metrics(ledger, today),

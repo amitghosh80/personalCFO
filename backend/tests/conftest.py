@@ -50,6 +50,7 @@ def _make_txn(
     income_category: str | None = None,
     is_duplicate: bool = False,
     is_ambiguous: bool = False,
+    source_file_hash: str = "hash1",
 ) -> Transaction:
     t = Transaction(
         user_id=TEST_USER_ID,
@@ -58,7 +59,7 @@ def _make_txn(
         description=encrypt(description),
         amount=amount,
         transaction_type=txn_type,
-        source_file_hash="hash1",
+        source_file_hash=source_file_hash,
         expense_category=expense_category,
         expense_subcategory=expense_subcategory,
         is_income_candidate=is_income_candidate,

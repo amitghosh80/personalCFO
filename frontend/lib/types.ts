@@ -79,6 +79,7 @@ export interface MonthlyRow {
   net: number;
   top_categories: CategoryBreakdown[];
   income_transactions: IncomeTransaction[];
+  is_partial: boolean;
 }
 
 // Primary keys mirror backend TAXONOMY in expense_categorizer.py.
@@ -419,6 +420,7 @@ export type FinancialProfileSource = "ledger" | "user_estimate" | "none";
 export interface FinancialProfile {
   computed_at: string;
   ledger_months_available: number;
+  complete_months?: string[];
   source: FinancialProfileSource;
   estimated: boolean;
   vitals_completed_at?: string;

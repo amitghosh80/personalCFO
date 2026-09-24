@@ -121,3 +121,29 @@ def test_current_partial_month_skips_mom_comparisons():
     top_category = next((i for i in insights if i["type"] == "top_category_vs_prior"), None)
     if top_category is not None:
         assert "from" not in top_category["title"]
+
+
+def test_prior_month_partial_skips_mom_comparisons():
+    # February's statement only covers the first half of the month (no
+    # follow-up file for the rest of Feb), even though March is a complete,
+    # fully-elapsed month. Comparing March against a partial February must be
+    # suppressed just like comparing against a partial *current* month is —
+    # today only the target month's completeness was checked, not the prior
+    # month's, which was the bug.
+    eng = _engine()
+    with Session(eng) as session:
+        session.add(_txn("job-feb", date(2026, 2, 1), "TRADER JOES", 100.0, TransactionType.debit,
+                          expense_category="food_and_drink", expense_subcategory="groceries"))
+        session.add(_txn("job-feb", date(2026, 2, 15), "MOVIE THEATER", 15.0, TransactionType.debit,
+                          expense_category="entertainment", expense_subcategory="movies"))
+        session.add(_txn("job-mar", date(2026, 3, 1), "TRADER JOES", 400.0, TransactionType.debit,
+                          expense_category="food_and_drink", expense_subcategory="groceries"))
+        session.add(_txn("job-mar", date(2026, 3, 31), "MOVIE THEATER", 15.0, TransactionType.debit,
+                          expense_category="entertainment", expense_subcategory="movies"))
+        session.commit()
+        insights = dashboard_insights(session, TEST_USER_ID, "job-mar")
+
+    assert all(i["type"] != "mom_spending_change" for i in insights)
+    top_category = next((i for i in insights if i["type"] == "top_category_vs_prior"), None)
+    if top_category is not None:
+        assert "from" not in top_category["title"]

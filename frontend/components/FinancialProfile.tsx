@@ -703,6 +703,9 @@ export default function FinancialProfile({
   if (!profile) return null;
 
   const estimated = profile.estimated;
+  const completeMonths = profile.complete_months ?? [];
+  const showPartialDataBanner =
+    !estimated && profile.source === "ledger" && completeMonths.length < profile.ledger_months_available;
 
   return (
     <SectionCard
@@ -732,6 +735,23 @@ export default function FinancialProfile({
               Import a statement to see your real numbers
             </Link>
           </div>
+        </div>
+      )}
+      {showPartialDataBanner && (
+        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+          {completeMonths.length > 0 ? (
+            <>
+              This profile is based on {completeMonths.length} complete month
+              {completeMonths.length !== 1 ? "s" : ""} of data ({formatMonth(completeMonths[0])}
+              {completeMonths.length > 1 ? ` – ${formatMonth(completeMonths[completeMonths.length - 1])}` : ""}),
+              which is complete.{" "}
+            </>
+          ) : (
+            "None of your imported months have complete statement coverage yet. "
+          )}
+          {profile.ledger_months_available - completeMonths.length} month
+          {profile.ledger_months_available - completeMonths.length !== 1 ? "s" : ""} with a partial statement
+          upload {profile.ledger_months_available - completeMonths.length !== 1 ? "are" : "is"} excluded.
         </div>
       )}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 grid-flow-row-dense">

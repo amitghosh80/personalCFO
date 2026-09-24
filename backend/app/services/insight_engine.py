@@ -13,6 +13,7 @@ from ..models.transaction import Transaction, TransactionType
 from ..services.expense_categorizer import CATEGORY_DISPLAY
 from ..services.analytics import (
     load_ledger,
+    month_completeness,
     cashflow_summary,
     income_summary,
     spending_by_category,
@@ -1219,18 +1220,16 @@ def _insights_for_month(session: Session, user_id: int, ledger: list[dict], mont
     idx = all_months.index(month) if month in all_months else -1
     prior_month = all_months[idx - 1] if idx > 0 else None
 
-    # A month with fewer days of data than it actually has (the current
-    # calendar month still in progress, or the last imported statement ending
-    # mid-month) always looks like a huge swing against a fully-elapsed prior
-    # month that isn't real. Drop the cross-month comparison for that case; a
-    # same-month metric like savings rate is unaffected.
-    month_dates = [t["date"] for t in ledger if t["month"] == month]
-    latest_in_month = max(month_dates) if month_dates else None
-    is_partial_month = (
-        month == date.today().strftime("%Y-%m")
-        or (latest_in_month is not None and latest_in_month.day != monthrange(latest_in_month.year, latest_in_month.month)[1])
-    )
-    comparison_prior_month = None if is_partial_month else prior_month
+    # A month whose statement coverage doesn't reach both calendar edges (the
+    # current month still in progress, a statement ending mid-month, or a gap
+    # left by a partial upload) always looks like a huge swing against a
+    # fully-elapsed neighboring month that isn't real. Drop the cross-month
+    # comparison if EITHER side of it is partial; a same-month metric like
+    # savings rate is unaffected.
+    completeness = month_completeness(ledger)
+    month_complete = completeness.get(month, False)
+    prior_complete = prior_month is None or completeness.get(prior_month, False)
+    comparison_prior_month = prior_month if (month_complete and prior_complete) else None
 
     candidates = [c for c in (
         _dash_top_category(session, user_id, month, comparison_prior_month),
