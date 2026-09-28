@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr, field_validator
@@ -172,7 +172,7 @@ def dismiss_vitals_prompt(
     reappear on later /app visits — called when the user picks "Import a
     statement" instead of the vitals interview."""
     if current_user.vitals_prompt_dismissed_at is None:
-        current_user.vitals_prompt_dismissed_at = datetime.utcnow()
+        current_user.vitals_prompt_dismissed_at = datetime.now(timezone.utc)
         session.add(current_user)
         session.commit()
         session.refresh(current_user)

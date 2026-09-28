@@ -1,5 +1,5 @@
 from sqlmodel import Field, SQLModel
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Optional
 from enum import Enum
 
@@ -51,4 +51,4 @@ class Transaction(SQLModel, table=True):
     transfer_status: Optional[str] = Field(default=None)   # "paired" | "unconfirmed"
     transfer_pair_id: Optional[int] = Field(default=None)  # the matched transaction's id
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

@@ -1,5 +1,5 @@
 from sqlmodel import Field, SQLModel
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
@@ -16,4 +16,4 @@ class PasswordResetToken(SQLModel, table=True):
     token_hash: str = Field(index=True, unique=True)
     expires_at: datetime
     used_at: Optional[datetime] = Field(default=None)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

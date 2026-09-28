@@ -1,4 +1,4 @@
-from datetime import date as date_, datetime
+from datetime import date as date_, datetime, timezone
 from typing import Optional
 
 from sqlmodel import Field, SQLModel, UniqueConstraint
@@ -15,4 +15,4 @@ class ChatUsage(SQLModel, table=True):
     user_id: int = Field(foreign_key="app_user.id", index=True)
     usage_date: date_ = Field(index=True)
     message_count: int = Field(default=0)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

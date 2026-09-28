@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from sqlmodel import Field, SQLModel
@@ -40,5 +40,5 @@ class Insight(SQLModel, table=True):
     supporting_transaction_ids: str = Field(default="[]")  # JSON
     suggested_next_step: str
     is_dismissed: bool = Field(default=False)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     meta_json: str = Field(default="{}")  # JSON (named to avoid SQLAlchemy reserved 'metadata')

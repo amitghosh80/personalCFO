@@ -1,5 +1,5 @@
 from sqlmodel import Field, SQLModel
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
@@ -18,5 +18,5 @@ class MerchantRule(SQLModel, table=True):
     merchant_pattern: str = Field(index=True)
     primary: str
     subcategory: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     match_count: int = Field(default=0)

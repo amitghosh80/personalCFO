@@ -3,7 +3,7 @@ import re
 import statistics
 from calendar import monthrange
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from sqlmodel import Session, select
@@ -116,7 +116,7 @@ def _insight(
         "supporting_transaction_ids": json.dumps(supporting),
         "suggested_next_step": next_step,
         "is_dismissed": False,
-        "created_at": datetime.utcnow(),
+        "created_at": datetime.now(timezone.utc),
         "meta_json": json.dumps(meta),
     }
 

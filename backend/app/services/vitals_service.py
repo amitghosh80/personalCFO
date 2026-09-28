@@ -1,7 +1,7 @@
 """Persistence for the Financial Vitals Interview (AMI-66): the user-estimate
 inputs that back an estimated Financial Profile before any statement has been
 imported. One row per user, always replaced in place."""
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
@@ -38,7 +38,7 @@ def save_vitals(
 ) -> FinancialVitals:
     """Insert or replace the user's vitals row atomically. Callers must
     validate inputs before calling this — it performs no bounds checking."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     record = get_vitals(session, user_id)
     if record is None:
         record = FinancialVitals(user_id=user_id, created_at=now)

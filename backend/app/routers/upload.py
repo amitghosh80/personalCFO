@@ -1,7 +1,7 @@
 import hashlib
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Request, UploadFile, Depends
 from sqlmodel import Session
@@ -198,7 +198,7 @@ async def upload_statements(
 
     job.total_transactions = total_saved
     job.status = ImportStatus.pending_income_review
-    job.completed_at = datetime.utcnow()
+    job.completed_at = datetime.now(timezone.utc)
     session.add(job)
     session.commit()
 

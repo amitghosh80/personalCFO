@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlmodel import Field, SQLModel
@@ -15,4 +15,4 @@ class Feedback(SQLModel, table=True):
     attachment: Optional[bytes] = Field(default=None)
     attachment_filename: Optional[str] = Field(default=None)
     attachment_content_type: Optional[str] = Field(default=None)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

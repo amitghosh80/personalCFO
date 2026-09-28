@@ -1,5 +1,5 @@
 from sqlmodel import Field, SQLModel
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from enum import Enum
 
@@ -17,5 +17,5 @@ class ImportJob(SQLModel, table=True):
     file_count: int
     total_transactions: int = Field(default=0)
     file_results_json: Optional[str] = Field(default=None)  # JSON array of per-file summaries
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: Optional[datetime] = Field(default=None)

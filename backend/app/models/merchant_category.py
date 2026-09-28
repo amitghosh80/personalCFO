@@ -1,5 +1,5 @@
 from sqlmodel import Field, SQLModel
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
@@ -15,4 +15,4 @@ class MerchantCategoryCache(SQLModel, table=True):
     primary: str
     subcategory: str
     source: str = Field(default="ai")  # "ai" | "rule"
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

@@ -10,7 +10,7 @@ import calendar
 import re
 import statistics
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from sqlmodel import Session, select
 
@@ -913,7 +913,7 @@ def get_financial_profile(session: Session, user_id: int, today: date | None = N
     today = today or date.today()
     ledger = load_ledger(session, user_id)
     months_available = len({t["month"] for t in ledger})
-    computed_at = datetime.utcnow().isoformat() + "Z"
+    computed_at = datetime.now(timezone.utc).isoformat()
 
     if ledger:
         return {

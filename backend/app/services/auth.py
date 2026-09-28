@@ -65,7 +65,7 @@ def create_reset_token(session: Session, user_id: int) -> str:
         PasswordResetToken(
             user_id=user_id,
             token_hash=_hash_reset_token(raw_token),
-            expires_at=datetime.utcnow() + timedelta(minutes=RESET_TOKEN_TTL_MINUTES),
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=RESET_TOKEN_TTL_MINUTES),
         )
     )
     return raw_token
@@ -79,10 +79,10 @@ def consume_reset_token(session: Session, raw_token: str) -> User | None:
             PasswordResetToken.token_hash == _hash_reset_token(raw_token)
         )
     ).first()
-    if not token or token.used_at is not None or token.expires_at < datetime.utcnow():
+    if not token or token.used_at is not None or token.expires_at < datetime.now(timezone.utc):
         return None
 
-    token.used_at = datetime.utcnow()
+    token.used_at = datetime.now(timezone.utc)
     session.add(token)
     return session.get(User, token.user_id)
 
