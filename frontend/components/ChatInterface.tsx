@@ -176,18 +176,18 @@ export default function ChatInterface({
   const showFollowups = !loading && messages.length > 0 && !!lastAssistantFollowups?.length;
 
   return (
-    <div className="flex flex-col h-[85vh] rounded-3xl border border-gray-200 bg-white shadow-lg overflow-hidden">
+    <div className="flex flex-col h-[85vh] rounded-3xl border border-gray-200 bg-white shadow-lg">
       {/* Header */}
-      <div className="flex items-center gap-3 px-5 py-3.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white shrink-0">
-        <div className="h-9 w-9 rounded-full bg-white/15 backdrop-blur flex items-center justify-center text-base font-bold ring-1 ring-white/30">
-          $
-        </div>
-        <div className="min-w-0">
-          <p className="text-sm font-semibold leading-tight">AskCFO</p>
-          <p className="text-[11px] text-blue-100/90 leading-tight truncate">
-            Your personal finance analyst
-          </p>
-        </div>
+      <div className="relative flex flex-col items-start gap-0.5 px-5 py-3.5 rounded-t-3xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white shrink-0">
+        <img
+          src="/askcfo-icon.png"
+          alt=""
+          className="absolute left-1/2 top-1/2 z-10 h-40 w-auto -translate-x-1/2 -translate-y-1/2 object-contain drop-shadow-md"
+        />
+        <p className="text-sm font-semibold leading-tight">AskCFO</p>
+        <p className="text-[11px] text-blue-100/90 leading-tight truncate">
+          Your personal finance analyst
+        </p>
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-4 p-4 bg-gradient-to-b from-gray-50/60 to-white">
@@ -307,7 +307,7 @@ export default function ChatInterface({
 
       {error && <div className="text-red-600 text-sm px-4 py-1">{error}</div>}
 
-      <div className="flex items-center gap-2 border-t border-gray-100 px-4 py-3.5 bg-white shrink-0">
+      <div className="flex items-center gap-2 border-t border-gray-100 px-4 py-3.5 rounded-b-3xl bg-white shrink-0">
         <input
           className="flex-1 border border-gray-200 rounded-full px-4 py-2.5 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
           placeholder="Ask a question about your money…"

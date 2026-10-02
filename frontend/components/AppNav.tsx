@@ -41,11 +41,7 @@ function ReviewQueueIcon() {
 }
 
 function AskCfoIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="h-5 w-5 shrink-0">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 5h16v10H9l-4 4v-4H4V5Z" />
-    </svg>
-  );
+  return <img src="/askcfo-icon.png" alt="" className="h-5 w-5 shrink-0 rounded-sm" />;
 }
 
 const IMPORT_LINK = { href: "/app", label: "Import", Icon: ImportIcon };

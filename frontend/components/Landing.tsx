@@ -214,8 +214,11 @@ export default function Landing() {
 
             {/* Ask CFO chat */}
             <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5 shadow-sm">
-              <div className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-3">
-                Ask your money
+              <div className="flex items-center gap-2 mb-3">
+                <img src="/askcfo-icon.png" alt="" className="h-5 w-5 rounded-sm shrink-0" />
+                <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                  Ask your money
+                </span>
               </div>
               <div className="space-y-3">
                 <div className="text-right">
